@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	linodeconfigv1 "github.com/asauber/cluster-api-provider-linode/pkg/apis/linodeproviderconfig/v1alpha1"
+	lkeconfigv1 "bits.linode.com/asauber/cluster-api-provider-lke/pkg/apis/lkeproviderconfig/v1alpha1"
 	"github.com/golang/glog"
 	"github.com/linode/linodego"
 	"golang.org/x/net/context"
@@ -54,10 +54,10 @@ type initScriptParams struct {
 	MasterEndpoint string
 }
 
-func isMaster(roles []linodeconfigv1.MachineRole) bool {
+func isMaster(roles []lkeconfigv1.MachineRole) bool {
 	glog.Infof("roles %v", roles)
 	for _, r := range roles {
-		if r == linodeconfigv1.MasterRole {
+		if r == lkeconfigv1.MasterRole {
 			return true
 		}
 	}
@@ -74,7 +74,7 @@ func isMaster(roles []linodeconfigv1.MachineRole) bool {
  * to be used with RequeueAfterError.
  */
 
-func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, machine *clusterv1.Machine, config *linodeconfigv1.LinodeMachineProviderConfig) (*initScript, error) {
+func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, machine *clusterv1.Machine, config *lkeconfigv1.LkeMachineProviderConfig) (*initScript, error) {
 	initScript := &initScript{}
 
 	stackscript, err := lc.getInitStackScript(cluster, config)
@@ -113,7 +113,7 @@ func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, 
 	return initScript, nil
 }
 
-func (lc *LinodeClient) getInitStackScript(cluster *clusterv1.Cluster, config *linodeconfigv1.LinodeMachineProviderConfig) (*linodego.Stackscript, error) {
+func (lc *LinodeClient) getInitStackScript(cluster *clusterv1.Cluster, config *lkeconfigv1.LkeMachineProviderConfig) (*linodego.Stackscript, error) {
 	linodeClient, err := getLinodeAPIClient(lc.client, cluster)
 	if err != nil {
 		return nil, fmt.Errorf("Error initializing Linode API client: %v", err)

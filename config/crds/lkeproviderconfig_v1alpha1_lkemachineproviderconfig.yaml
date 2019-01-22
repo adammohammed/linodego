@@ -4,12 +4,12 @@ metadata:
   creationTimestamp: null
   labels:
     controller-tools.k8s.io: "1.0"
-  name: linodemachineproviderconfigs.linodeproviderconfig.linode.com
+  name: lkemachineproviderconfigs.lkeproviderconfig.linode.com
 spec:
-  group: linodeproviderconfig.linode.com
+  group: lkeproviderconfig.linode.com
   names:
-    kind: LinodeMachineProviderConfig
-    plural: linodemachineproviderconfigs
+    kind: LkeMachineProviderConfig
+    plural: lkemachineproviderconfigs
   scope: Namespaced
   validation:
     openAPIV3Schema:

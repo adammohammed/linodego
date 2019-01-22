@@ -5,9 +5,9 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - linodeproviderconfig.linode.com
+  - lkeproviderconfig.linode.com
   resources:
-  - linodeclusterproviderconfigs
+  - lkeclusterproviderconfigs
   verbs:
   - get
   - list
@@ -17,9 +17,9 @@ rules:
   - patch
   - delete
 - apiGroups:
-  - linodeproviderconfig.linode.com
+  - lkeproviderconfig.linode.com
   resources:
-  - linodemachineproviderconfigs
+  - lkemachineproviderconfigs
   verbs:
   - get
   - list

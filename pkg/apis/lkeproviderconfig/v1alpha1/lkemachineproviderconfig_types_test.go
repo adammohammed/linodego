@@ -26,21 +26,22 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func TestStorageLinodeClusterProviderConfig(t *testing.T) {
+func TestStorageLkeMachineProviderConfig(t *testing.T) {
 	key := types.NamespacedName{
 		Name:      "foo",
 		Namespace: "default",
 	}
-	created := &LinodeClusterProviderConfig{
+	created := &LkeMachineProviderConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: "default",
 		},
+		Roles: *new([]MachineRole),
 	}
 	g := gomega.NewGomegaWithT(t)
 
 	// Test Create
-	fetched := &LinodeClusterProviderConfig{}
+	fetched := &LkeMachineProviderConfig{}
 	g.Expect(c.Create(context.TODO(), created)).NotTo(gomega.HaveOccurred())
 
 	g.Expect(c.Get(context.TODO(), key, fetched)).NotTo(gomega.HaveOccurred())

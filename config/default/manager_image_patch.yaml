@@ -7,6 +7,5 @@ spec:
   template:
     spec:
       containers:
-      # Change the value of image field below to your controller image URL
-      - image: asauber/cluster-api-provider-linode:latest
+      - image: bits.linode.com/asauber/cluster-api-provider-lke
         name: manager

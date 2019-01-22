@@ -1,14 +1,16 @@
-# Kubernetes cluster-api-provider-linode 
+# Kubernetes cluster-api-provider-lke
 
-This repository hosts a concrete implementation of a provider for
-[Linode](https://www.linode.com/) for the [cluster-api
+This repository hosts an implementation of a provider for the Linode
+Kubernetes Engine for the [cluster-api
 project](https://github.com/kubernetes-sigs/cluster-api).
+
+It is a fork of our [publicly accessible cluster-api provider implementation](https://github.com/asauber/cluster-api-provider-linode). All changes deemed
+relevant for public consumption should be upstreamed to that repository.
 
 ## Project Status
 
 This project is currently Work-in-Progress and may not be production ready.
-There is no backwards-compatibility guarantee at this point. Checkout the
-Features portion of the README for details about the project status.
+There is no backwards-compatibility guarantee at this point.
 
 ## Getting Started
 
@@ -28,7 +30,11 @@ brew install go
 * This Cluster-API implementation
 
 ```bash
-go get github.com/asauber/cluster-api-provider-linode
+cat >> ~/.gitconfig <<EOF
+[url "git@bits.linode.com:"]
+    insteadOf = https://bits.linode.com/
+EOF
+go get bits.linode.com/asauber/cluster-api-provider-lke
 ```
 
 * [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
@@ -37,10 +43,10 @@ go get github.com/asauber/cluster-api-provider-linode
 brew install kubernetes-cli
 ```
 
-* [`minikube`](https://kubernetes.io/docs/tasks/tools/install-minikube/) version 0.28.1
+* [`minikube`](https://kubernetes.io/docs/tasks/tools/install-minikube/)
 
 ```bash
-curl -Lo minikube https://storage.googleapis.com/minikube/releases/v0.28.1/minikube-darwin-amd64 && chmod +x minikube && sudo cp minikube /usr/local/bin/ && rm minikube
+brew cask install minikube
 ```
 
 * `virtualbox` on macOS or [`kvm2`](https://github.com/kubernetes/minikube/blob/master/docs/drivers.md) on Linux.
@@ -71,13 +77,13 @@ brew install kustomize
 
 ## Creating a Cluster
 
-To create a cluster using `cluster-api-provider-linode`, you
+To create a cluster using `cluster-api-provider-lke`, you
 
-1. Start minikube
-1. Deploy a collection of Kubernetes resources to minikube that implement
-the cluster-api, the "provider components"
-1. Deploy a collection of Kubernetes resources to minikube that represent
-your new cluster
+1. Have a Kubernetes cluster (we will use minikube)
+1. Deploy a collection of Kubernetes resources to that cluster which implement
+the cluster-api and the cluster-api provider (the "provider components")
+1. Deploy a collection of Kubernetes resources to that cluster which represent
+your new LKE cluster
 
 First, start minikube
 

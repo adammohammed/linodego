@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	linodeconfigv1 "github.com/asauber/cluster-api-provider-linode/pkg/apis/linodeproviderconfig/v1alpha1"
+	lkeconfigv1 "bits.linode.com/asauber/cluster-api-provider-lke/pkg/apis/lkeproviderconfig/v1alpha1"
 	"github.com/ghodss/yaml"
 	"github.com/golang/glog"
 	"github.com/linode/linodego"
@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	ProviderName = "linode"
+	ProviderName = "lke"
 )
 
 const (
@@ -102,12 +102,12 @@ func getLinodeAPIClient(client client.Client, cluster *clusterv1.Cluster) (*lino
 		},
 	}
 	linodeClient := linodego.NewClient(oauth2Client)
-	linodeClient.SetUserAgent(fmt.Sprintf("cluster-api-provider-linode %s", linodego.DefaultUserAgent))
+	linodeClient.SetUserAgent(fmt.Sprintf("cluster-api-provider-lke %s", linodego.DefaultUserAgent))
 	// linodeClient.SetDebug(true)
 	return &linodeClient, nil
 }
 
-func (lc *LinodeClient) validateMachine(machine *clusterv1.Machine, config *linodeconfigv1.LinodeMachineProviderConfig) *apierrors.MachineError {
+func (lc *LinodeClient) validateMachine(machine *clusterv1.Machine, config *lkeconfigv1.LkeMachineProviderConfig) *apierrors.MachineError {
 	if machine.Spec.Versions.Kubelet == "" {
 		return apierrors.InvalidMachineConfiguration("spec.versions.kubelet can't be empty")
 	}
@@ -283,8 +283,8 @@ func (lc *LinodeClient) Exists(cluster *clusterv1.Cluster, machine *clusterv1.Ma
 	return (instance != nil), err
 }
 
-func clusterProviderConfig(providerConfig clusterv1.ProviderConfig) (*linodeconfigv1.LinodeClusterProviderConfig, error) {
-	var config linodeconfigv1.LinodeClusterProviderConfig
+func clusterProviderConfig(providerConfig clusterv1.ProviderConfig) (*lkeconfigv1.LkeClusterProviderConfig, error) {
+	var config lkeconfigv1.LkeClusterProviderConfig
 	if err := yaml.Unmarshal(providerConfig.Value.Raw, &config); err != nil {
 		return nil, err
 	}
@@ -295,8 +295,8 @@ func (lc *LinodeClient) MachineLabel(cluster *clusterv1.Cluster, machine *cluste
 	return fmt.Sprintf("%s-%s", cluster.ObjectMeta.Name, machine.ObjectMeta.Name)
 }
 
-func machineProviderConfig(providerConfig clusterv1.ProviderConfig) (*linodeconfigv1.LinodeMachineProviderConfig, error) {
-	var config linodeconfigv1.LinodeMachineProviderConfig
+func machineProviderConfig(providerConfig clusterv1.ProviderConfig) (*lkeconfigv1.LkeMachineProviderConfig, error) {
+	var config lkeconfigv1.LkeMachineProviderConfig
 	if err := yaml.Unmarshal(providerConfig.Value.Raw, &config); err != nil {
 		return nil, err
 	}

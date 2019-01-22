@@ -21,27 +21,38 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type MachineRole string
+
+const (
+	MasterRole MachineRole = "Master"
+	NodeRole   MachineRole = "Node"
+)
+
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LinodeClusterProviderConfig is the Schema for the linodeclusterproviderconfigs API
+// LkeMachineProviderConfig is the Schema for the lkemachineproviderconfigs API
 // +k8s:openapi-gen=true
-type LinodeClusterProviderConfig struct {
+type LkeMachineProviderConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	AuthorizedKeys []string `json:"authorizedKeys,omitempty"`
+	Roles  []MachineRole `json:"roles,omitempty"`
+	Region string        `json:"region"`
+	Type   string        `json:"type"`
+	Image  string        `json:"image"`
+	Pubkey string        `json:"pubkey"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LinodeClusterProviderConfigList contains a list of LinodeClusterProviderConfig
-type LinodeClusterProviderConfigList struct {
+// LkeMachineProviderConfigList contains a list of LkeMachineProviderConfig
+type LkeMachineProviderConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []LinodeClusterProviderConfig `json:"items"`
+	Items           []LkeMachineProviderConfig `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&LinodeClusterProviderConfig{}, &LinodeClusterProviderConfigList{})
+	SchemeBuilder.Register(&LkeMachineProviderConfig{}, &LkeMachineProviderConfigList{})
 }

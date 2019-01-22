@@ -1,9 +1,9 @@
-apiVersion: linodeproviderconfig.linode.com/v1alpha1
-kind: LinodeMachineProviderConfig
+apiVersion: lkeproviderconfig.linode.com/v1alpha1
+kind: LkeMachineProviderConfig
 metadata:
   labels:
     controller-tools.k8s.io: "1.0"
-  name: linodemachineproviderconfig-sample
+  name: lkemachineproviderconfig-sample
 spec:
   # Add fields here
   foo: bar

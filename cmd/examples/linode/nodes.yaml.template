@@ -8,8 +8,8 @@ metadata:
 spec:
   providerConfig:
     value:
-      apiVersion: "linodeproviderconfig/v1alpha1"
-      kind: "LinodeMachineProviderConfig"
+      apiVersion: "lkeproviderconfig/v1alpha1"
+      kind: "LkeMachineProviderConfig"
       roles:
       - Node
       region: "us-east"

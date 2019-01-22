@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= asauber/cluster-api-provider-linode:latest
+IMG ?= bits.linode.com/asauber/cluster-api-provider-lke
 
 all: test manager
 
@@ -10,7 +10,7 @@ test: generate fmt vet manifests
 
 # Build manager binary
 manager: generate fmt vet
-	go build -o bin/manager github.com/asauber/cluster-api-provider-linode/cmd/manager
+	go build -o bin/manager bits.linode.com/asauber/cluster-api-provider-lke/cmd/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet

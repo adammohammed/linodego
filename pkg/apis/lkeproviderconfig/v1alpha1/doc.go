@@ -15,10 +15,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1alpha1 contains API Schema definitions for the linodeproviderconfig v1alpha1 API group
+// Package v1alpha1 contains API Schema definitions for the lkeproviderconfig v1alpha1 API group
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen=package,register
-// +k8s:conversion-gen=github.com/asauber/cluster-api-provider-linode/pkg/apis/linodeproviderconfig
+// +k8s:conversion-gen=bits.linode.com/asauber/cluster-api-provider-lke/pkg/apis/lkeproviderconfig
 // +k8s:defaulter-gen=TypeMeta
-// +groupName=linodeproviderconfig.linode.com
+// +groupName=lkeproviderconfig.linode.com
 package v1alpha1

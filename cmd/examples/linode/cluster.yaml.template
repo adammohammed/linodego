@@ -17,8 +17,8 @@ spec:
         serviceDomain: "cluster.local"
     providerConfig:
       value:
-        apiVersion: "linodeproviderconfig/v1alpha1"
-        kind: "LinodeClusterProviderConfig"
+        apiVersion: "lkeproviderconfig/v1alpha1"
+        kind: "LkeClusterProviderConfig"
         authorizedKeys:
           - "$SSH_PUBLIC_KEY"
 ---

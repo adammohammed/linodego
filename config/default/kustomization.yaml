@@ -1,12 +1,12 @@
 # Adds namespace to all resources.
-namespace: cluster-api-provider-linode-system
+namespace: cluster-api-provider-lke-system
 
 # Value of this field is prepended to the
 # names of all resources, e.g. a deployment named
 # "wordpress" becomes "alices-wordpress".
 # Note that it should also match with the prefix (text before '-') of the namespace
 # field above.
-namePrefix: cluster-api-provider-linode-
+namePrefix: cluster-api-provider-lke-
 
 # Labels to add to all resources and selectors.
 #commonLabels:
@@ -18,8 +18,8 @@ namePrefix: cluster-api-provider-linode-
 # YAML string, with resources separated by document
 # markers ("---").
 resources:
-- ../crds/linodeproviderconfig_v1alpha1_linodeclusterproviderconfig.yaml
-- ../crds/linodeproviderconfig_v1alpha1_linodemachineproviderconfig.yaml
+- ../crds/lkeproviderconfig_v1alpha1_lkeclusterproviderconfig.yaml
+- ../crds/lkeproviderconfig_v1alpha1_lkemachineproviderconfig.yaml
 - ../rbac/rbac_role.yaml
 - ../rbac/rbac_role_binding.yaml
 - ../manager/manager.yaml

@@ -15,5 +15,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package linodeproviderconfig contains linodeproviderconfig API versions
-package linodeproviderconfig
+// Package lkeproviderconfig contains lkeproviderconfig API versions
+package lkeproviderconfig

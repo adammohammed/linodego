@@ -1,9 +1,9 @@
-apiVersion: linodeproviderconfig.linode.com/v1alpha1
-kind: LinodeClusterProviderConfig
+apiVersion: lkeproviderconfig.linode.com/v1alpha1
+kind: LkeClusterProviderConfig
 metadata:
   labels:
     controller-tools.k8s.io: "1.0"
-  name: linodeclusterproviderconfig-sample
+  name: lkeclusterproviderconfig-sample
 spec:
   # Add fields here
   foo: bar
