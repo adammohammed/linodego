@@ -7,5 +7,5 @@ spec:
   template:
     spec:
       containers:
-      - image: bits.linode.com/asauber/cluster-api-provider-lke
+      - image: linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:latest
         name: manager

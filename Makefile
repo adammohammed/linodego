@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= bits.linode.com/asauber/cluster-api-provider-lke
+IMG ?= linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:latest
 
 all: test manager
 
