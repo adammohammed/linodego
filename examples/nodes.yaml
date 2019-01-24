@@ -1,0 +1,19 @@
+apiVersion: "cluster.k8s.io/v1alpha1"
+kind: Machine
+metadata:
+  name: node
+  labels:
+    set: node
+  namespace: cluster01
+spec:
+  providerSpec:
+    value:
+      apiVersion: "lkeproviderconfig/v1alpha1"
+      kind: "LkeMachineProviderConfig"
+      roles:
+      - Node
+      region: "us-east"
+      type: "g6-standard-2"
+      image: "linode/ubuntu18.04"
+  versions:
+    kubelet: 1.11.3
