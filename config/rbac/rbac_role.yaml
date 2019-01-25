@@ -8,26 +8,9 @@ rules:
   - lkeproviderconfig.linode.com
   resources:
   - lkeclusterproviderconfigs
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - lkeproviderconfig.linode.com
-  resources:
   - lkemachineproviderconfigs
   verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
+  - '*'
 - apiGroups:
   - cluster.k8s.io
   resources:
@@ -36,18 +19,13 @@ rules:
   - machinedeployments
   - machinesets
   verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
+  - '*'
 - apiGroups:
   - ""
   resources:
+  # need to look for cluster-specific secrets in every namespace
   - secrets
-  - nodes
+  # need to create cluster-specific events in every namespace
   - events
   verbs:
   - get

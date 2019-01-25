@@ -15,7 +15,7 @@ spec:
         pods: 
             cidrBlocks: ["10.1.0.0/16"]
         serviceDomain: "cluster.local"
-    providerConfig:
+    providerSpec:
       value:
         apiVersion: "lkeproviderconfig/v1alpha1"
         kind: "LkeClusterProviderConfig"

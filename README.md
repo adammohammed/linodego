@@ -98,19 +98,19 @@ minikube --memory 8192 --cpus 2 start
 Next, use `kustomize` to render the templates for the provider components.
 
 ```bash
-kustomize build config/default/ > cmd/examples/linode/provider-components.yaml
-echo "---" >> cmd/examples/linode/provider-components.yaml
-kustomize build vendor/sigs.k8s.io/cluster-api/config/default/ >> cmd/examples/linode/provider-components.yaml
+kustomize build config/default/ > provider-components.yaml
+echo "---" >> provider-components.yaml
+kustomize build vendor/sigs.k8s.io/cluster-api/config/default/ >> provider-components.yaml
 ```
 
 This generates a YAML file which will be used to create the namespaces,
 custom resource defintions, roles, rolebindings, and services which run
-the Linode cluster-api controllers and the upstream cluster-api controllers.
+the LKE cluster-api controllers and the upstream cluster-api controllers.
 
 Deploy these resources to minikube.
 
 ```bash
-kubectl create -f cmd/examples/linode/provider-components.yaml
+kubectl apply -f provider-components.yaml
 ```
 
 Next, generate manifests for your cluster. You must provide a path to a

@@ -114,22 +114,8 @@ func (lc *LinodeClient) validateMachine(machine *clusterv1.Machine, config *lkec
 	return nil
 }
 
-func (lc *LinodeClient) Create(cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
+func (lc *LinodeClient) Create(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 	glog.Infof("Creating machine %v/%v", cluster.Name, machine.Name)
-
-	machineConfig, err := machineProviderConfig(machine.Spec.ProviderConfig)
-	if err != nil {
-		return lc.handleMachineError(machine, apierrors.InvalidMachineConfiguration(
-			"Cannot unmarshal machine's providerConfig field: %v", err), createEventAction)
-	}
-	if verr := lc.validateMachine(machine, machineConfig); verr != nil {
-		return lc.handleMachineError(machine, verr, createEventAction)
-	}
-
-	clusterConfig, err := clusterProviderConfig(cluster.Spec.ProviderConfig)
-	if err != nil {
-		return err
-	}
 
 	instance, err := lc.instanceIfExists(cluster, machine)
 	if err != nil {
@@ -137,11 +123,29 @@ func (lc *LinodeClient) Create(cluster *clusterv1.Cluster, machine *clusterv1.Ma
 	}
 
 	if instance == nil {
+		machineConfig, err := machineProviderConfig(machine.Spec.ProviderSpec)
+		if err != nil {
+			return lc.handleMachineError(machine, apierrors.InvalidMachineConfiguration(
+				"Cannot unmarshal machine's providerConfig field: %v", err), createEventAction)
+		}
+		if verr := lc.validateMachine(machine, machineConfig); verr != nil {
+			return lc.handleMachineError(machine, verr, createEventAction)
+		}
+
+		clusterConfig, err := clusterProviderConfig(cluster.Spec.ProviderSpec)
+		if clusterConfig == nil {
+			return fmt.Errorf("LKE cluster spec was not provided for cluster %v", cluster.Name)
+		}
+		if err != nil {
+			return err
+		}
+
 		token, err := getJoinToken(lc.client, cluster)
 		if err != nil {
 			return err
 		}
 
+		glog.Infof("roles %v", machineConfig.Roles)
 		initScript, err := lc.getInitScript(token, cluster, machine, machineConfig)
 		if err != nil {
 			return err
@@ -153,9 +157,9 @@ func (lc *LinodeClient) Create(cluster *clusterv1.Cluster, machine *clusterv1.Ma
 		}
 
 		/*
-		 * Use a bootstrap token as a random root password. Replace this if the
-		 * function is removed upstream. Don't store this - the idea is that no one
-		 * ever knows the root password.
+		* Use a bootstrap token as a random root password. Replace this if the
+		* function is removed upstream. Don't store this - the idea is that no one
+		* ever knows the root password.
 		 */
 		rootPass, err := bootstraputil.GenerateBootstrapToken()
 		if err != nil {
@@ -244,7 +248,7 @@ func (lc *LinodeClient) handleMachineError(machine *clusterv1.Machine, err *apie
 	return err
 }
 
-func (lc *LinodeClient) Delete(cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
+func (lc *LinodeClient) Delete(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 	linodeIDStr, ok := machine.ObjectMeta.Annotations[machineLinodeIDAnnotationName]
 	if !ok {
 		return fmt.Errorf("Error deleting machine, no Linode ID annotation")
@@ -268,13 +272,13 @@ func (lc *LinodeClient) Delete(cluster *clusterv1.Cluster, machine *clusterv1.Ma
 	return nil
 }
 
-func (lc *LinodeClient) Update(cluster *clusterv1.Cluster, goalMachine *clusterv1.Machine) error {
+func (lc *LinodeClient) Update(ctx context.Context, cluster *clusterv1.Cluster, goalMachine *clusterv1.Machine) error {
 	glog.Infof("TODO (Not Implemented): Updating machine with cluster %v.", cluster.Name)
 	glog.Infof("TODO (Not Implemented): Updating machine %v.", goalMachine.Name)
 	return nil
 }
 
-func (lc *LinodeClient) Exists(cluster *clusterv1.Cluster, machine *clusterv1.Machine) (bool, error) {
+func (lc *LinodeClient) Exists(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) (bool, error) {
 	glog.Infof("Checking Exists for machine %v/%v", cluster.Name, machine.Name)
 	instance, err := lc.instanceIfExists(cluster, machine)
 	if err != nil {
@@ -283,7 +287,7 @@ func (lc *LinodeClient) Exists(cluster *clusterv1.Cluster, machine *clusterv1.Ma
 	return (instance != nil), err
 }
 
-func clusterProviderConfig(providerConfig clusterv1.ProviderConfig) (*lkeconfigv1.LkeClusterProviderConfig, error) {
+func clusterProviderConfig(providerConfig clusterv1.ProviderSpec) (*lkeconfigv1.LkeClusterProviderConfig, error) {
 	var config lkeconfigv1.LkeClusterProviderConfig
 	if err := yaml.Unmarshal(providerConfig.Value.Raw, &config); err != nil {
 		return nil, err
@@ -295,7 +299,7 @@ func (lc *LinodeClient) MachineLabel(cluster *clusterv1.Cluster, machine *cluste
 	return fmt.Sprintf("%s-%s", cluster.ObjectMeta.Name, machine.ObjectMeta.Name)
 }
 
-func machineProviderConfig(providerConfig clusterv1.ProviderConfig) (*lkeconfigv1.LkeMachineProviderConfig, error) {
+func machineProviderConfig(providerConfig clusterv1.ProviderSpec) (*lkeconfigv1.LkeMachineProviderConfig, error) {
 	var config lkeconfigv1.LkeMachineProviderConfig
 	if err := yaml.Unmarshal(providerConfig.Value.Raw, &config); err != nil {
 		return nil, err

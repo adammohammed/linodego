@@ -19,14 +19,10 @@ package linode
 
 import (
 	"fmt"
-	"time"
 
 	lkeconfigv1 "bits.linode.com/asauber/cluster-api-provider-lke/pkg/apis/lkeproviderconfig/v1alpha1"
-	"github.com/golang/glog"
 	"github.com/linode/linodego"
 	"golang.org/x/net/context"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
 )
 
@@ -55,7 +51,6 @@ type initScriptParams struct {
 }
 
 func isMaster(roles []lkeconfigv1.MachineRole) bool {
-	glog.Infof("roles %v", roles)
 	for _, r := range roles {
 		if r == lkeconfigv1.MasterRole {
 			return true
@@ -95,7 +90,9 @@ func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, 
 			"service_cidr":   cluster.Spec.ClusterNetwork.Services.CIDRBlocks[0],
 		}
 	} else {
-		latestCluster, err := lc.waitForClusterEndpoint(cluster)
+		if len(cluster.Status.APIEndpoints) < 1 {
+			return nil, fmt.Errorf("Cannot init machine when there are no kube-apiserver endpoints")
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -106,7 +103,7 @@ func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, 
 			"namespace":      machine.ObjectMeta.Namespace,
 			"machinename":    machine.ObjectMeta.Name,
 			"service_domain": cluster.Spec.ClusterNetwork.ServiceDomain,
-			"endpoint":       endpoint(latestCluster.Status.APIEndpoints[0]),
+			"endpoint":       endpoint(cluster.Status.APIEndpoints[0]),
 		}
 	}
 
@@ -164,27 +161,6 @@ func getStackScriptByLabel(linodeClient *linodego.Client, label string) (*linode
 		return nil, nil
 	}
 	return &stackscripts[0], nil
-}
-
-func (lc *LinodeClient) waitForClusterEndpoint(cluster *clusterv1.Cluster) (*clusterv1.Cluster, error) {
-	pollCluster := cluster.DeepCopy()
-
-	err := wait.Poll(10*time.Second, 10*time.Minute, func() (done bool, err error) {
-		err = lc.client.Get(context.Background(),
-			types.NamespacedName{Namespace: cluster.GetNamespace(), Name: cluster.GetName()},
-			pollCluster)
-		if err != nil {
-			return false, err
-		}
-		if len(pollCluster.Status.APIEndpoints) > 0 {
-			glog.Infof("Cluster has an endpoint %v", pollCluster.Status.APIEndpoints[0])
-			return true, nil
-		}
-		glog.Infof("waiting until cluster has an endpoint %s", cluster.Name)
-		return false, nil
-	})
-
-	return pollCluster, err
 }
 
 func endpoint(apiEndpoint clusterv1.APIEndpoint) string {
