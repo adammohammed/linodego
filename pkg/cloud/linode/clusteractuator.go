@@ -26,7 +26,10 @@ import (
 )
 
 const (
-	chartPath = "charts"
+	chartPath          = "charts"
+	lkeclusterPath     = chartPath + "/" + "lkecluster"
+	etcdChartPath      = lkeclusterPath + "/" + "etcd"
+	apiserverChartPath = lkeclusterPath + "/" + "apiserver"
 )
 
 type LinodeClusterClient struct {
@@ -59,7 +62,33 @@ func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
 // If they are not, deploy or modify them
 func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster) error {
 	glog.Infof("Reconciling control plane for cluster %v.", cluster.Name)
-	lcc.reconcileEtcd(cluster)
+
+	if err := lcc.reconcileAPIServer(cluster); err != nil {
+		return err
+	}
+
+	if err := lcc.reconcileEtcd(cluster); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
+	// TODO: validate that API Server is running for the cluster
+
+	// Deploy API Server for the LKE cluster
+	values := map[string]interface{}{
+
+		"ClusterName":   cluster.Name,
+		"APIServerPort": "6443",
+	}
+
+	if err := lcc.chartDeployer.DeployChart(apiserverChartPath, cluster.Name, values); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -71,7 +100,10 @@ func (lcc *LinodeClusterClient) reconcileEtcd(cluster *clusterv1.Cluster) error 
 
 	// Deploy etcd for the LKE cluster
 	values := make(map[string]interface{})
-	lcc.chartDeployer.DeployChart("charts/lkecluster/etcd", cluster.Name, values)
+	if err := lcc.chartDeployer.DeployChart(etcdChartPath, cluster.Name, values); err != nil {
+		return nil
+	}
+
 	return nil
 }
 
