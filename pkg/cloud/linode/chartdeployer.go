@@ -1,11 +1,10 @@
 package linode
 
 import (
-	"fmt"
-
 	"github.com/gardener/gardener/pkg/chartrenderer"
 	"github.com/gardener/gardener/pkg/client/kubernetes"
 	"github.com/gardener/gardener/pkg/client/kubernetes/base"
+	"github.com/golang/glog"
 	"k8s.io/client-go/rest"
 )
 
@@ -35,6 +34,8 @@ func (cd *ChartDeployer) DeployChart(chartPath, namespace string, values map[str
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%v", renderedChart.Files)
+	glog.Infof("We are deploy the following manifests")
+	glog.Infof("%v", renderedChart.Files)
+	cd.cpcClient.Apply(renderedChart.Manifest())
 	return nil
 }

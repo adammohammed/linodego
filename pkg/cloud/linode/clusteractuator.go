@@ -70,7 +70,8 @@ func (lcc *LinodeClusterClient) reconcileEtcd(cluster *clusterv1.Cluster) error 
 	// TODO: validate that etcd is running for the cluster
 
 	// Deploy etcd for the LKE cluster
-
+	values := make(map[string]interface{})
+	lcc.chartDeployer.DeployChart("charts/lkecluster/etcd", cluster.Name, values)
 	return nil
 }
 
