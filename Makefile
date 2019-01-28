@@ -2,6 +2,8 @@
 # Image URL to use all building/pushing image targets
 IMG ?= linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:latest
 
+export GO111MODULE=on
+
 all: test manager
 
 # Run tests
@@ -27,7 +29,7 @@ deploy: manifests
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests:
-	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen all
 
 # Run go fmt against code
 fmt:

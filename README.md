@@ -100,7 +100,7 @@ Next, use `kustomize` to render the templates for the provider components.
 ```bash
 kustomize build config/default/ > provider-components.yaml
 echo "---" >> provider-components.yaml
-kustomize build vendor/sigs.k8s.io/cluster-api/config/default/ >> provider-components.yaml
+kustomize build git::https://github.com/kubernetes-sigs/cluster-api//config/default >> provider-components.yaml
 ```
 
 This generates a YAML file which will be used to create the namespaces,
@@ -117,9 +117,7 @@ Next, generate manifests for your cluster. You must provide a path to a
 public key that will be used to access your cluster.
 
 ```bash
-cd cmd/examples/linode
-./generate-yaml.sh $HOME/.ssh/id_rsa.pub
-cd ../../..
+( cd examples; ./generate-yaml.sh $HOME/.ssh/id_rsa.pub cluster01 )
 ```
 
 This generates a YAML file which will be used to create a namespace, cluster,
