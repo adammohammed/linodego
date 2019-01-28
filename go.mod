@@ -7,15 +7,14 @@ require (
 	github.com/Masterminds/sprig v2.17.1+incompatible // indirect
 	github.com/aokoli/goutils v1.1.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.2 // indirect
+	github.com/dnaeon/go-vcr v1.0.1 // indirect
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
-	github.com/emicklei/go-restful v2.8.1+incompatible // indirect
+	github.com/elazarl/goproxy v0.0.0-20181111060418-2ce16c963a8a // indirect
 	github.com/gardener/gardener v0.0.0-20190111065104-f865f232
 	github.com/gardener/machine-controller-manager v0.0.0-20190125105937-98eb4668d237 // indirect
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.1.0 // indirect
 	github.com/go-logr/zapr v0.1.0 // indirect
-	github.com/go-openapi/spec v0.18.0 // indirect
-	github.com/go-resty/resty v1.11.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gogo/protobuf v1.1.1 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
@@ -29,7 +28,7 @@ require (
 	github.com/huandu/xstrings v1.2.0 // indirect
 	github.com/imdario/mergo v0.3.6 // indirect
 	github.com/json-iterator/go v1.1.5 // indirect
-	github.com/linode/linodego v0.5.1
+	github.com/linode/linodego v0.7.0
 	github.com/mattbaird/jsonpatch v0.0.0-20171005235357-81af80346b1a // indirect
 	github.com/miekg/dns v1.1.3 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -41,7 +40,6 @@ require (
 	github.com/prometheus/client_golang v0.9.2 // indirect
 	github.com/sirupsen/logrus v1.3.0 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
-	github.com/ugorji/go/codec v0.0.0-20190126102652-8fd0f8d918c8 // indirect
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.9.1 // indirect
@@ -53,6 +51,7 @@ require (
 	golang.org/x/tools v0.0.0-20190125232054-d66bd3c5d5a6 // indirect
 	google.golang.org/appengine v1.2.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
+	gopkg.in/resty.v1 v1.11.0 // indirect
 	k8s.io/api v0.0.0-20190126160303-6b7c4c78788565e25d
 	k8s.io/apiextensions-apiserver v0.0.0-20180808065829-ba848ee89ca33b3 // indirect
 	k8s.io/apimachinery v0.0.0-20181127105237-6dd46049f
