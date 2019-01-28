@@ -1,3 +1,6 @@
+apiVersion: v1beta1
+kind: Kustomization
+
 # Adds namespace to all resources.
 namespace: cluster-api-provider-lke-system
 
@@ -17,12 +20,12 @@ namePrefix: cluster-api-provider-lke-
 # files that kustomize reads, modifies and emits as a
 # YAML string, with resources separated by document
 # markers ("---").
-resources:
-- ../crds/lkeproviderconfig_v1alpha1_lkeclusterproviderconfig.yaml
-- ../crds/lkeproviderconfig_v1alpha1_lkemachineproviderconfig.yaml
-- ../rbac/rbac_role.yaml
-- ../rbac/rbac_role_binding.yaml
-- ../manager/manager.yaml
 
-patches:
+resources:
+- crds/lkeproviderconfig_v1alpha1_lkeclusterproviderconfig.yaml
+- crds/lkeproviderconfig_v1alpha1_lkemachineproviderconfig.yaml
+- rbac/rbac_role.yaml
+- rbac/rbac_role_binding.yaml
+- manager/manager.yaml
+patchesStrategicMerge:
 - manager_image_patch.yaml
