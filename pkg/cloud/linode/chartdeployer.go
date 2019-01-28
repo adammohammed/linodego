@@ -1,6 +1,8 @@
 package linode
 
 import (
+	"fmt"
+
 	"github.com/gardener/gardener/pkg/chartrenderer"
 	"github.com/gardener/gardener/pkg/client/kubernetes"
 	"github.com/gardener/gardener/pkg/client/kubernetes/base"
@@ -28,5 +30,11 @@ func newChartDeployer(config *rest.Config) (*ChartDeployer, error) {
 }
 
 func (cd *ChartDeployer) DeployChart(chartPath, namespace string, values map[string]interface{}) error {
+	// use the chartPath as the releaseName, because we're in a cluster-specific namespace
+	renderedChart, err := cd.renderer.Render(chartPath, chartPath, namespace, values)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%v", renderedChart.Files)
 	return nil
 }
