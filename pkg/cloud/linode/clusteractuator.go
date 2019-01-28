@@ -38,9 +38,14 @@ type ClusterActuatorParams struct {
 }
 
 func NewClusterActuator(m manager.Manager, params ClusterActuatorParams) (*LinodeClusterClient, error) {
+	chartDeployer, err := newChartDeployer(m.GetConfig())
+	if err != nil {
+		return nil, err
+	}
+
 	return &LinodeClusterClient{
 		client:        m.GetClient(),
-		chartDeployer: newChartDeployer(m.GetConfig()),
+		chartDeployer: chartDeployer,
 	}, nil
 }
 

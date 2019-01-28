@@ -32,6 +32,7 @@ github.com/gardener/gardener v0.0.0-20190111065104-f865f232 h1:7iVfnYteB33ZXBcvP
 github.com/gardener/gardener v0.0.0-20190111065104-f865f232/go.mod h1:uRS25af8GjLnNo7RErPDKhBsemnJADTldiQhtVbUPHw=
 github.com/gardener/gardener v0.0.0-20190125154109-273a2c12b88d h1:yXHrl9rC6Kk+r9ocFt74QKATnZijZxhD++jG7tonVac=
 github.com/gardener/gardener v0.0.0-20190125154109-273a2c12b88d/go.mod h1:uRS25af8GjLnNo7RErPDKhBsemnJADTldiQhtVbUPHw=
+github.com/gardener/gardener v0.0.0-20190128080400-2d0e57a7b77e h1:pRr4hc/rpb7+xADA/K6jaXYX7JoiULSNsO/4/49OEiU=
 github.com/gardener/machine-controller-manager v0.0.0-20190125105937-98eb4668d237 h1:9q+lOO1HZAyEs/dYoJxDhopFg5zoQMga9z8quIRFbSI=
 github.com/gardener/machine-controller-manager v0.0.0-20190125105937-98eb4668d237/go.mod h1:/ZDmMugbfkBfOO6/nrdnqV+OMSEuF75wrF9KFIuqndM=
 github.com/ghodss/yaml v1.0.0 h1:wQHKEahhL6wmXdzwWG11gIVCkOv05bNOh+Rxn0yngAk=

@@ -3,17 +3,17 @@ package linode
 import (
 	"github.com/gardener/gardener/pkg/chartrenderer"
 	"github.com/gardener/gardener/pkg/client/kubernetes"
+	"github.com/gardener/gardener/pkg/client/kubernetes/base"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ChartDeployer struct {
-	cpcClient kubernetes.Interface
+	cpcClient kubernetes.Client
 	renderer  chartrenderer.ChartRenderer
 }
 
 func newChartDeployer(config *rest.Config) (*ChartDeployer, error) {
-	client, err := kubernetes.NewForConfig(config, client.Options{})
+	client, err := kubernetesbase.NewForConfig(config)
 	if err != nil {
 		return nil, err
 	}
