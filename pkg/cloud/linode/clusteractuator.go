@@ -25,21 +25,53 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
+const (
+	chartPath = "charts"
+)
+
 type LinodeClusterClient struct {
-	client client.Client
+	client        client.Client
+	chartDeployer *ChartDeployer
 }
 
 type ClusterActuatorParams struct {
 }
 
 func NewClusterActuator(m manager.Manager, params ClusterActuatorParams) (*LinodeClusterClient, error) {
+	chartDeployer, err := newChartDeployer(m.GetConfig())
+	if err != nil {
+		return nil, err
+	}
+
 	return &LinodeClusterClient{
-		client: m.GetClient(),
+		client:        m.GetClient(),
+		chartDeployer: chartDeployer,
 	}, nil
 }
 
 func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
 	glog.Infof("Reconciling cluster %v.", cluster.Name)
+	lcc.reconcileControlPlane(cluster)
+	return nil
+}
+
+// Validate that control plane services are deployed and running with expected configuration
+// If they are not, deploy or modify them
+func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling control plane for cluster %v.", cluster.Name)
+	lcc.reconcileEtcd(cluster)
+	return nil
+}
+
+// Validate that etcd is deployed and running for the cluster
+// If it's not, deploy or modify the existing deployment
+func (lcc *LinodeClusterClient) reconcileEtcd(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling etcd for cluster %v.", cluster.Name)
+	// TODO: validate that etcd is running for the cluster
+
+	// Deploy etcd for the LKE cluster
+	values := make(map[string]interface{})
+	lcc.chartDeployer.DeployChart("charts/lkecluster/etcd", cluster.Name, values)
 	return nil
 }
 

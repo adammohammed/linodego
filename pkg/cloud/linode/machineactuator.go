@@ -251,7 +251,8 @@ func (lc *LinodeClient) handleMachineError(machine *clusterv1.Machine, err *apie
 func (lc *LinodeClient) Delete(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 	linodeIDStr, ok := machine.ObjectMeta.Annotations[machineLinodeIDAnnotationName]
 	if !ok {
-		return fmt.Errorf("Error deleting machine, no Linode ID annotation")
+		glog.Infof("Deleting machine resource, but no Linode deleted (no Linode ID annotation)")
+		return nil
 	}
 	glog.Infof("Deleting Linode with ID %s", linodeIDStr)
 
