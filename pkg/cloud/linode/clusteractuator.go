@@ -30,6 +30,7 @@ const (
 	lkeclusterPath     = chartPath + "/" + "lkecluster"
 	etcdChartPath      = lkeclusterPath + "/" + "etcd"
 	apiserverChartPath = lkeclusterPath + "/" + "apiserver"
+	cmChartPath        = lkeclusterPath + "/" + "controller-manager"
 )
 
 type LinodeClusterClient struct {
@@ -71,6 +72,10 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 		return err
 	}
 
+	if err := lcc.reconcileControllerManager(cluster); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -101,6 +106,25 @@ func (lcc *LinodeClusterClient) reconcileEtcd(cluster *clusterv1.Cluster) error 
 	// Deploy etcd for the LKE cluster
 	values := make(map[string]interface{})
 	if err := lcc.chartDeployer.DeployChart(etcdChartPath, cluster.Name, values); err != nil {
+		return nil
+	}
+
+	return nil
+}
+
+// Validate that etcd is deployed and running for the cluster
+// If it's not, deploy or modify the existing deployment
+func (lcc *LinodeClusterClient) reconcileControllerManager(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling kube-controller-manager for cluster %v.", cluster.Name)
+	// TODO: validate that kube-controller-manager is running for the cluster
+
+	// Deploy etcd for the LKE cluster
+	values := map[string]interface{}{
+		"ClusterName":   cluster.Name,
+		"APIServerPort": "6443",
+	}
+
+	if err := lcc.chartDeployer.DeployChart(cmChartPath, cluster.Name, values); err != nil {
 		return nil
 	}
 
