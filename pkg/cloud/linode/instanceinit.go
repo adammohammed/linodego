@@ -62,7 +62,7 @@ func isMaster(roles []lkeconfigv1.MachineRole) bool {
 /*
  * TODO: Render different shell scripts for each combination of
  *	{ Machine State, Operating System Image, Roles }
- * Other cluster-api implmentations do this partially with ConfigMaps and logic
+ * Other cluster-api implementations do this partially with ConfigMaps and logic
  * that tries to match Machine fields with scripts in those ConfigMaps.
  * However, the way in which they are implemented is currently too rigid, as
  * those scripts are not composable or broken out for different machine states

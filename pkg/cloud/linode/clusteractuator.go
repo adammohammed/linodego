@@ -91,6 +91,8 @@ func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster) e
 	}
 
 	if err := lcc.chartDeployer.DeployChart(apiserverChartPath, cluster.Name, values); err != nil {
+		glog.Errorf("Error reconciling apiserver for cluster %v: %v", cluster.Name, err)
+
 		return err
 	}
 
@@ -106,7 +108,9 @@ func (lcc *LinodeClusterClient) reconcileEtcd(cluster *clusterv1.Cluster) error 
 	// Deploy etcd for the LKE cluster
 	values := make(map[string]interface{})
 	if err := lcc.chartDeployer.DeployChart(etcdChartPath, cluster.Name, values); err != nil {
-		return nil
+		glog.Errorf("Error reconciling etcd for cluster %v: %v", cluster.Name, err)
+
+		return err
 	}
 
 	return nil
@@ -120,12 +124,15 @@ func (lcc *LinodeClusterClient) reconcileControllerManager(cluster *clusterv1.Cl
 
 	// Deploy etcd for the LKE cluster
 	values := map[string]interface{}{
-		"ClusterName":   cluster.Name,
-		"APIServerPort": "6443",
+		"ClusterName":           cluster.Name,
+		"APIServerPort":         "6443",
+		"ControllerManagerPort": "6444",
 	}
 
 	if err := lcc.chartDeployer.DeployChart(cmChartPath, cluster.Name, values); err != nil {
-		return nil
+		glog.Errorf("Error reconciling kube-controller-manager for cluster %v: %v", cluster.Name, err)
+
+		return err
 	}
 
 	return nil

@@ -34,7 +34,7 @@ func (cd *ChartDeployer) DeployChart(chartPath, namespace string, values map[str
 	if err != nil {
 		return err
 	}
-	glog.Infof("We are deploy the following manifests")
+	glog.Infof("We are deploying the following manifests")
 	glog.Infof("%v", renderedChart.Files)
 	cd.cpcClient.Apply(renderedChart.Manifest())
 	return nil
