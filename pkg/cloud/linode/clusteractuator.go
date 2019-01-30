@@ -64,6 +64,10 @@ func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
 func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster) error {
 	glog.Infof("Reconciling control plane for cluster %v.", cluster.Name)
 
+	if err := lcc.generateSecrets(cluster); err != nil {
+		return err
+	}
+
 	if err := lcc.reconcileAPIServer(cluster); err != nil {
 		return err
 	}
