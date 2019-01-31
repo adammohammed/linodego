@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   namespace: kube-system-{{ .Release.Namespace }}
-  name: kube-apiserver-deployment
+  name: kube-apiserver
   labels:
     app: kube-apiserver
 spec:
@@ -35,7 +35,7 @@ spec:
         - --etcd-cafile=/etc/{{ .Values.ClusterName }}/pki/etcd/ca.crt
         - --etcd-certfile=/etc/{{ .Values.ClusterName }}/pki/apiserver-etcd-client.crt
         - --etcd-keyfile=/etc/{{ .Values.ClusterName }}/pki/apiserver-etcd-client.key
-        - --etcd-servers=https://etcd.kube-system-{{ .Values.ClusterName }}.svc.cluster.local:2379
+        - --etcd-servers=https://etcd:2379
         - --insecure-port=0
         # modified
         - --kubelet-client-certificate=/etc/{{ .Values.ClusterName }}/pki/apiserver-kubelet-client.crt
@@ -102,31 +102,8 @@ spec:
           subPath: wg-node-watcher-token
           name: wg-node-watcher-token
           readOnly: true
-      - name: wg-node-controller
-        command:
-          - /wg-node-controller
-          - --cacrt=/pki/ca.crt
-          - --token=/wg-node-watcher-token
-          - --port=6443
-        env:
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
-        image: wg-node-controller
-        imagePullPolicy: IfNotPresent
-        resources:
-          requests:
-            cpu: 50m
-        volumeMounts:
-        - mountPath: /pki
-          name: k8s-certs
-          readOnly: true
-        - mountPath: /wg-node-watcher-token
-          subPath: wg-node-watcher-token
-          name: wg-node-watcher-token
-          readOnly: true
       hostNetwork: false
+      dnsPolicy: ClusterFirst
       # modified
       # priorityClassName: system-cluster-critical
       volumes:

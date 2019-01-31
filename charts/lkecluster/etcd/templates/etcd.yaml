@@ -10,7 +10,7 @@ metadata:
     component: etcd
     tier: control-plane
   name: etcd
-  namespace: {{ .Release.Namespace }}
+  namespace: kube-system-{{ .Release.Namespace }}
 spec:
   containers:
   - command:
@@ -63,7 +63,6 @@ spec:
       name: etcd-data
     - mountPath: /etc/kubernetes/pki/etcd
       name: etcd-certs
-  hostNetwork: true
   # modified
   # priorityClassName: system-cluster-critical
   volumes:
@@ -88,5 +87,5 @@ spec:
   ports:
   - protocol: TCP
     port: 2379
-    targetPort: 2380
+    targetPort: 2379
 apiVersion: v1

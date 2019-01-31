@@ -31,11 +31,24 @@ import (
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func createOpaqueSecret(client client.Client, name, namespace string, data map[string][]byte) error {
+	testSecret := &corev1.Secret{}
+	err := client.Get(context.Background(),
+		types.NamespacedName{Namespace: namespace, Name: name},
+		testSecret)
+	if err != nil {
+		return fmt.Errorf("Error testing if secret already exists: %v", name)
+	}
+	if len(testSecret.Name) > 0 {
+		glog.Infof("Not writing a secret that already exists")
+		return nil
+	}
+
 	secret := &corev1.Secret{}
 
 	secret.ObjectMeta = metav1.ObjectMeta{
