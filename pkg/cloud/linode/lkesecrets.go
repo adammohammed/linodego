@@ -81,9 +81,9 @@ const kubeadmConfigTemplate = `kind: ClusterConfiguration
 apiVersion: kubeadm.k8s.io/v1beta1
 apiServer:
   certSANs:
-	- {{ .NodeBalancerHostname }}
-	- kube-apiserver.kube-system-{{ .ClusterName }}.svc.cluster.local
-	- localhost
+  - {{ .NodeBalancerHostname }}
+  - kube-apiserver.kube-system-{{ .ClusterName }}.svc.cluster.local
+  - localhost
   extraArgs:
     authorization-mode: Node,RBAC
     cloud-provider: external
