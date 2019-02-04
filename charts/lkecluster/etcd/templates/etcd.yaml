@@ -16,14 +16,15 @@ spec:
   - command:
     - etcd
     # modified
-    - --advertise-client-urls=https://0.0.0.0:2379
+    - --advertise-client-urls=https://etcd:2379
     # modified
     - --cert-file=/etc/kubernetes/pki/etcd/server.crt
     - --client-cert-auth=true
     - --data-dir=/var/lib/etcd
     # modified
-    - --initial-advertise-peer-urls=https://0.0.0.0:2380
+    - --initial-advertise-peer-urls=https://localhost:2380
     # modified
+    # TODO rename the etcd cluster
     - --initial-cluster=cpc-poc-1=https://0.0.0.0:2380
     # modified
     - --key-file=/etc/kubernetes/pki/etcd/server.key
