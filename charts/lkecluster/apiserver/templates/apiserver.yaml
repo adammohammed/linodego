@@ -62,7 +62,7 @@ spec:
         # modified
         - --tls-private-key-file=/etc/{{ .Values.ClusterName }}/pki/apiserver.key
         - --token-auth-file=/etc/wg-node-watcher-token
-        image: k8s.gcr.io/kube-apiserver-amd64:v1.12.5
+        image: {{ index .Values "images" "kube-apiserver" }}
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 8
