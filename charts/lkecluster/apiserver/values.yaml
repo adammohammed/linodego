@@ -1,5 +1,5 @@
 images:
-  kube-apiserver: k8s.gcr.io/kube-apiserver-amd64:v1.13.2
+  kube-apiserver: k8s.gcr.io/kube-apiserver-amd64:v1.13.3
   wg-node-controller: wg-node-controller
 
 podAnnotations: {}

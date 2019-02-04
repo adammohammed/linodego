@@ -119,7 +119,7 @@ etcd:
     peerCertSANs:
       - etcd.kube-system-{{ .ClusterName }}.svc.cluster.local
 imageRepository: k8s.gcr.io
-kubernetesVersion: v1.13.2
+kubernetesVersion: v1.13.3
 networking:
   dnsDomain: cluster.local
   podSubnet: 10.2.0.0/16
