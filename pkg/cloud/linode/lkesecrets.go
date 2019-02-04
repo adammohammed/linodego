@@ -38,12 +38,9 @@ import (
 
 func createOpaqueSecret(client client.Client, name, namespace string, data map[string][]byte) error {
 	testSecret := &corev1.Secret{}
-	err := client.Get(context.Background(),
+	client.Get(context.Background(),
 		types.NamespacedName{Namespace: namespace, Name: name},
 		testSecret)
-	if err != nil {
-		return fmt.Errorf("Error testing if secret already exists: %v", name)
-	}
 	if len(testSecret.Name) > 0 {
 		glog.Infof("Not writing a secret that already exists")
 		return nil
