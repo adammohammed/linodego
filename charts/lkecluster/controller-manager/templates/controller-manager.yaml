@@ -95,8 +95,7 @@ spec:
           name: ca-certs
           readOnly: true
         - mountPath: /etc/{{ .Values.ClusterName }}/controller-manager.conf
-          subPath: controller-manager.conf
-          name: kubeconfig
+          name: controller-manager-kubeconfig
           readOnly: true
         - mountPath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
           name: flexvolume-dir
@@ -118,9 +117,9 @@ spec:
           path: /etc/ca-certificates
           type: DirectoryOrCreate
         name: etc-ca-certificates
-      - name: k8s-certs
+      - name: controller-manager-kubeconfig
         secret:
-          secretName: k8s-certs
+          secretName: controller-manager-kubeconfig
       - hostPath:
           path: /etc/ssl/certs
           type: DirectoryOrCreate

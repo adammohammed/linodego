@@ -112,8 +112,10 @@ etcd:
   local:
     dataDir: /var/lib/etcd
     serverCertSANs:
+      - etcd
       - etcd.kube-system-{{ .ClusterName }}.svc.cluster.local
     peerCertSANs:
+      - etcd
       - etcd.kube-system-{{ .ClusterName }}.svc.cluster.local
 imageRepository: k8s.gcr.io
 kubernetesVersion: v1.13.3

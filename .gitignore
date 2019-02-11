@@ -18,3 +18,5 @@ examples/cluster.yaml
 ./*.conf
 
 *.img
+
+*.sw*
