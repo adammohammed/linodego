@@ -20,3 +20,5 @@ examples/cluster.yaml
 *.img
 
 *.sw*
+
+manifests
