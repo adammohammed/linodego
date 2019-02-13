@@ -21,14 +21,13 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kube-controller-manager-deployment
+  name: kube-controller-manager
   namespace: kube-system-{{ .Values.ClusterName }}
   labels:
     lke.linode.com/role: controlplane
     app: kubernetes
     role: controller-manager
 spec:
-  revisionHistoryLimit: 0
   replicas: 1
   selector:
     matchLabels:
@@ -109,6 +108,9 @@ spec:
           name: etc-ca-certificates
           readOnly: true
       volumes:
+      - name: k8s-certs
+        secret:
+          secretName: k8s-certs
       - hostPath:
           path: /usr/local/share/ca-certificates
           type: DirectoryOrCreate
@@ -124,9 +126,6 @@ spec:
           path: /etc/ssl/certs
           type: DirectoryOrCreate
         name: ca-certs
-      - name: kubeconfig
-        configMap:
-          name: kubeconfig
       - hostPath:
           path: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
           type: DirectoryOrCreate
