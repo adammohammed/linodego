@@ -94,7 +94,7 @@ spec:
         - mountPath: /etc/ssl/certs
           name: ca-certs
           readOnly: true
-        - mountPath: /etc/{{ .Values.ClusterName }}/controller-manager.conf
+        - mountPath: /etc/{{ .Values.ClusterName }}
           name: controller-manager-kubeconfig
           readOnly: true
         - mountPath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec

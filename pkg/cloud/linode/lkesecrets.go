@@ -186,8 +186,8 @@ func generateCertsInit(client client.Client, cluster *clusterv1.Cluster) (*certs
 
 	/* Don't walk up the directory tree to place the kubeconfigs, keep
 	 * things rooted at the specified directory */
-	KubeconfigDir:	      dirname + "/kubeconfigs",
-	else if _, err := run("kubeadm", "init", "phase", "kubeconfig", "all", "--kubeconfig-dir", config); err != nil {
+	kubeconfigDir := dirname + "/kubeconfigs"
+	if _, err := run("kubeadm", "init", "phase", "kubeconfig", "all", "--kubeconfig-dir", kubeconfigDir, "--cert-dir", dirname); err != nil {
 		return nil, err
 	}
 
@@ -234,15 +234,26 @@ func addFiles(init *certsInit, certs map[string][]byte, keyval map[string]string
 	return nil
 }
 
+/* Add a Kubeconfig file that we find using :init: and :kubeconfigFilename: to
+ * a new secret map with :secretName:. Store this secret map in :kubeconfigs: */
+func addKubeconfig(kubeconfigs map[string]map[string][]byte, secretName string, kubeconfigFilename string, init *certsInit) error {
+	kubeconfigs[secretName] = make(map[string][]byte)
+	kubeconfigPaths := map[string]string{kubeconfigFilename: "kubeconfigs/"}
+	if err := addFiles(init, kubeconfigs[secretName], kubeconfigPaths); err != nil {
+		return err
+	}
+	return nil
+}
+
 func generateCerts(client client.Client, cluster *clusterv1.Cluster) (map[string][]byte, map[string][]byte, map[string]map[string][]byte, error) {
 	init, err := generateCertsInit(client, cluster)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	defer generateCertsFini(init)
 
 	k8sCerts := make(map[string][]byte)
-	k8skeyval := map[string]string{
+	k8sPaths := map[string]string{
 		"apiserver-etcd-client.crt":    "",
 		"apiserver-etcd-client.key":    "",
 		"apiserver-kubelet-client.crt": "",
@@ -258,12 +269,12 @@ func generateCerts(client client.Client, cluster *clusterv1.Cluster) (map[string
 		"sa.key":                       "",
 		"sa.pub":                       "",
 	}
-	if err := addFiles(init, k8sCerts, k8skeyval); err != nil {
-		return nil, nil, err
+	if err := addFiles(init, k8sCerts, k8sPaths); err != nil {
+		return nil, nil, nil, err
 	}
 
 	etcdCerts := make(map[string][]byte)
-	etcdKeyval := map[string]string{
+	etcdPaths := map[string]string{
 		"ca.crt":                 "etcd/",
 		"ca.key":                 "etcd/",
 		"healthcheck-client.crt": "etcd/",
@@ -273,20 +284,32 @@ func generateCerts(client client.Client, cluster *clusterv1.Cluster) (map[string
 		"server.crt":             "etcd/",
 		"server.key":             "etcd/",
 	}
-	if err := addFiles(init, etcdCerts, etcdKeyval); err != nil {
-		return nil, nil, err
+	if err := addFiles(init, etcdCerts, etcdPaths); err != nil {
+		return nil, nil, nil, err
 	}
 
 	/* Each Kubeconfig is placed in a separate secret map, so that users
 	 * can avoid using subPath and thus get live updates. To do this
 	 * we used a nested map */
 	kubeconfigs := make(map[string]map[string][]byte)
+	if err := addKubeconfig(kubeconfigs, "admin-kubeconfig", "admin.conf", init); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := addKubeconfig(kubeconfigs, "controller-manager-kubeconfig", "controller-manager.conf", init); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := addKubeconfig(kubeconfigs, "scheduler-kubeconfig", "scheduler.conf", init); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := addKubeconfig(kubeconfigs, "kubelet-kubeconfig", "kubelet.conf", init); err != nil {
+		return nil, nil, nil, err
+	}
 
-	return k8sCerts, kubeconfigs, etcdCerts, err
+	return k8sCerts, etcdCerts, kubeconfigs, err
 }
 
 func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster) error {
-	k8sCerts, kubeconfigs, etcdCerts, err := generateCerts(client, cluster)
+	k8sCerts, etcdCerts, kubeconfigs, err := generateCerts(client, cluster)
 	if err != nil {
 		return err
 	}
@@ -299,6 +322,12 @@ func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster) error
 
 	if err := createOpaqueSecret(client, ns, "etcd-certs", etcdCerts); err != nil {
 		return err
+	}
+
+	for secretName, secretMap := range kubeconfigs {
+		if err := createOpaqueSecret(client, ns, secretName, secretMap); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -353,7 +382,7 @@ func generateNodeWatcherSecrets(client client.Client, cluster *clusterv1.Cluster
 
 	name := "wg-node-watcher-token"
 	data := map[string][]byte{name: token}
-	return createOpaqueSecret(client, name, cluster.GetNamespace(), data)
+	return createOpaqueSecret(client, cluster.GetNamespace(), name, data)
 }
 
 /*
