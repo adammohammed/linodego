@@ -32,11 +32,9 @@ spec:
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 8
-          httpGet:
-            host: 127.0.0.1
-            path: /healthz
-            port: 10251
-            scheme: HTTP
+          # TODO: make this an HTTP health check with secure, random, credentials
+          tcpSocket:
+            port: 10259
           initialDelaySeconds: 15
           timeoutSeconds: 15
         name: kube-scheduler

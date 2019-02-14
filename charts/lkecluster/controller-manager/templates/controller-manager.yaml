@@ -75,11 +75,9 @@ spec:
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 8
-          httpGet:
-            host: 127.0.0.1
-            path: /healthz
+          # TODO: make this an HTTP health check with secure, random, credentials
+          tcpSocket:
             port: 10257
-            scheme: HTTPS
           initialDelaySeconds: 15
           timeoutSeconds: 15
         name: kube-controller-manager
