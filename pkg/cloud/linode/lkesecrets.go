@@ -187,7 +187,10 @@ func generateCertsInit(client client.Client, cluster *clusterv1.Cluster) (*certs
 	/* Don't walk up the directory tree to place the kubeconfigs, keep
 	 * things rooted at the specified directory */
 	kubeconfigDir := dirname + "/kubeconfigs"
-	if _, err := run("kubeadm", "init", "phase", "kubeconfig", "all", "--kubeconfig-dir", kubeconfigDir, "--cert-dir", dirname); err != nil {
+	if _, err := run("kubeadm", "init", "phase", "kubeconfig", "all",
+		"--kubeconfig-dir", kubeconfigDir,
+		"--cert-dir", dirname,
+		"--apiserver-advertise-address", cluster.Status.APIEndpoints[0].Host); err != nil {
 		return nil, err
 	}
 

@@ -126,8 +126,9 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 	if len(apiserverService.Status.LoadBalancer.Ingress) < 1 {
 		return fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
 	}
-
 	ip := apiserverService.Status.LoadBalancer.Ingress[0].IP
+
+	// Write that NodeBalancer address as the cluster API endpoint
 	glog.Infof("External IP for kube-apiserver for cluster %v: %v", cluster.Name, ip)
 	if err := lcc.writeClusterEndpoint(cluster, ip); err != nil {
 		return err

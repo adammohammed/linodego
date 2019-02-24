@@ -10,7 +10,7 @@ metadata:
 spec:
   type: LoadBalancer
   selector:
-    app: kube-apiserver
+    run: kube-apiserver
   ports:
     - name: https
       protocol: TCP
