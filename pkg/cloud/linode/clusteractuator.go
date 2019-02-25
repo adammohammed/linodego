@@ -37,6 +37,7 @@ const (
 	apiserverServiceChartPath = lkeclusterPath + "/" + "apiserver-service"
 	apiserverChartPath        = lkeclusterPath + "/" + "apiserver"
 	cmChartPath               = lkeclusterPath + "/" + "controller-manager"
+	schedChartPath            = lkeclusterPath + "/" + "scheduler"
 )
 
 type LinodeClusterClient struct {
@@ -92,6 +93,10 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 		return err
 	}
 
+	if err := lcc.reconcileScheduler(cluster); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -121,8 +126,9 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 	if len(apiserverService.Status.LoadBalancer.Ingress) < 1 {
 		return fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
 	}
-
 	ip := apiserverService.Status.LoadBalancer.Ingress[0].IP
+
+	// Write that NodeBalancer address as the cluster API endpoint
 	glog.Infof("External IP for kube-apiserver for cluster %v: %v", cluster.Name, ip)
 	if err := lcc.writeClusterEndpoint(cluster, ip); err != nil {
 		return err
@@ -178,13 +184,32 @@ func (lcc *LinodeClusterClient) reconcileControllerManager(cluster *clusterv1.Cl
 	glog.Infof("Reconciling kube-controller-manager for cluster %v.", cluster.Name)
 	// TODO: validate that kube-controller-manager is running for the cluster
 
-	// Deploy etcd for the LKE cluster
+	// Deploy the controller-manager for the LKE cluster
 	values := map[string]interface{}{
 		"ClusterName": cluster.Name,
 	}
 
 	if err := lcc.chartDeployer.DeployChart(cmChartPath, cluster.Name, values); err != nil {
 		glog.Errorf("Error reconciling kube-controller-manager for cluster %v: %v", cluster.Name, err)
+
+		return err
+	}
+
+	return nil
+}
+
+func (lcc *LinodeClusterClient) reconcileScheduler(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling scheduler for cluster %v.", cluster.Name)
+	// TODO: validate that scheduler is running for the cluster
+	// Dont re-deploy the scheduler if we don't need to
+
+	// Deploy the scheduler for the LKE cluster
+	values := map[string]interface{}{
+		"ClusterName": cluster.Name,
+	}
+
+	if err := lcc.chartDeployer.DeployChart(schedChartPath, cluster.Name, values); err != nil {
+		glog.Errorf("Error reconciling scheduler for cluster %v: %v", cluster.Name, err)
 
 		return err
 	}

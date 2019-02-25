@@ -1,81 +1,77 @@
 # Child cluster etcd
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  annotations:
-    # modified
-    # scheduler.alpha.kubernetes.io/critical-pod: ""
-  creationTimestamp: null
-  labels:
-    component: etcd
-    tier: control-plane
-  name: etcd
   namespace: kube-system-{{ .Release.Namespace }}
+  name: etcd
+  labels:
+    app: etcd
 spec:
-  containers:
-  - command:
-    - etcd
-    # modified
-    - --advertise-client-urls=https://etcd:2379
-    # modified
-    - --cert-file=/etc/kubernetes/pki/etcd/server.crt
-    - --client-cert-auth=true
-    - --data-dir=/var/lib/etcd
-    # modified
-    - --initial-advertise-peer-urls=https://localhost:2380
-    # modified
-    # TODO rename the etcd cluster
-    - --initial-cluster=cpc-poc-1=https://0.0.0.0:2380
-    # modified
-    - --key-file=/etc/kubernetes/pki/etcd/server.key
-    # modified
-    - --listen-client-urls=https://0.0.0.0:2379
-    # modified
-    - --listen-peer-urls=https://0.0.0.0:2380
-    - --name=cpc-poc-1
-    # modified
-    - --peer-cert-file=/etc/kubernetes/pki/etcd/peer.crt
-    - --peer-client-cert-auth=true
-    # modified
-    - --peer-key-file=/etc/kubernetes/pki/etcd/peer.key
-    # modified
-    - --peer-trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt
-    - --snapshot-count=10000
-    # modified
-    - --trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt
-    image: k8s.gcr.io/etcd-amd64:3.2.24
-    imagePullPolicy: IfNotPresent
-    livenessProbe:
-      exec:
-        command:
-        - /bin/sh
-        - -ec
-        # modified
-        - ETCDCTL_API=3 etcdctl --endpoints=https://localhost:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt
-          --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key
-          get foo
-      failureThreshold: 8
-      initialDelaySeconds: 15
-      timeoutSeconds: 15
-    name: etcd
-    resources: {}
-    volumeMounts:
-    - mountPath: /var/lib/etcd
-      name: etcd-data
-    - mountPath: /etc/kubernetes/pki/etcd
-      name: etcd-certs
-  # modified
-  # priorityClassName: system-cluster-critical
-  volumes:
-  - name: etcd-certs
-    secret:
-      secretName: etcd-certs
-  - hostPath:
-      # modified
-      path: /var/lib/etcd/{{ .Release.Namespace }}
-      type: DirectoryOrCreate
-    name: etcd-data
-status: {}
+  replicas: 1
+  selector:
+    matchLabels:
+      component: etcd
+  template:
+    metadata:
+      annotations:
+        # deprecated in 1.13
+        # scheduler.alpha.kubernetes.io/critical-pod: ""
+      creationTimestamp: null
+      labels:
+        component: etcd
+        tier: control-plane
+      name: etcd
+      namespace: kube-system-{{ .Release.Namespace }}
+    spec:
+      containers:
+      - command:
+        - etcd
+        - --advertise-client-urls=https://etcd:2379
+        - --cert-file=/etc/kubernetes/pki/etcd/server.crt
+        - --client-cert-auth=true
+        - --data-dir=/var/lib/etcd
+        - --initial-advertise-peer-urls=https://0.0.0.0:2380
+        - --initial-cluster=cpc-poc-1=https://0.0.0.0:2380
+        - --key-file=/etc/kubernetes/pki/etcd/server.key
+        - --listen-client-urls=https://0.0.0.0:2379
+        - --listen-peer-urls=https://0.0.0.0:2380
+        - --name=cpc-poc-1
+        - --peer-cert-file=/etc/kubernetes/pki/etcd/peer.crt
+        - --peer-client-cert-auth=true
+        - --peer-key-file=/etc/kubernetes/pki/etcd/peer.key
+        - --peer-trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt
+        - --snapshot-count=10000
+        - --trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt
+        image: k8s.gcr.io/etcd-amd64:3.2.24
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -ec
+            - ETCDCTL_API=3 etcdctl --endpoints=https://localhost:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt
+              --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key
+              get foo
+          failureThreshold: 8
+          initialDelaySeconds: 15
+          timeoutSeconds: 15
+        name: etcd
+        resources: {}
+        volumeMounts:
+        - mountPath: /var/lib/etcd
+          name: etcd-data
+        - mountPath: /etc/kubernetes/pki/etcd
+          name: etcd-certs
+      # only pods in kube-system can have this priorityClassName
+      # priorityClassName: system-cluster-critical
+      volumes:
+      - name: etcd-certs
+        secret:
+          secretName: etcd-certs
+      - hostPath:
+          path: /var/lib/etcd/{{ .Release.Namespace }}
+          type: DirectoryOrCreate
+        name: etcd-data
 ---
 kind: Service
 apiVersion: v1

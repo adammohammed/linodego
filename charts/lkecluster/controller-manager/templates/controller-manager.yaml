@@ -21,14 +21,13 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kube-controller-manager-deployment
+  name: kube-controller-manager
   namespace: kube-system-{{ .Values.ClusterName }}
   labels:
     lke.linode.com/role: controlplane
     app: kubernetes
     role: controller-manager
 spec:
-  revisionHistoryLimit: 0
   replicas: 1
   selector:
     matchLabels:
@@ -76,11 +75,9 @@ spec:
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 8
-          httpGet:
-            host: 127.0.0.1
-            path: /healthz
+          # TODO: make this an HTTP health check with secure, random, credentials
+          tcpSocket:
             port: 10257
-            scheme: HTTPS
           initialDelaySeconds: 15
           timeoutSeconds: 15
         name: kube-controller-manager
@@ -94,9 +91,8 @@ spec:
         - mountPath: /etc/ssl/certs
           name: ca-certs
           readOnly: true
-        - mountPath: /etc/{{ .Values.ClusterName }}/controller-manager.conf
-          subPath: controller-manager.conf
-          name: kubeconfig
+        - mountPath: /etc/{{ .Values.ClusterName }}
+          name: controller-manager-kubeconfig
           readOnly: true
         - mountPath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
           name: flexvolume-dir
@@ -110,6 +106,9 @@ spec:
           name: etc-ca-certificates
           readOnly: true
       volumes:
+      - name: k8s-certs
+        secret:
+          secretName: k8s-certs
       - hostPath:
           path: /usr/local/share/ca-certificates
           type: DirectoryOrCreate
@@ -118,16 +117,13 @@ spec:
           path: /etc/ca-certificates
           type: DirectoryOrCreate
         name: etc-ca-certificates
-      - name: k8s-certs
+      - name: controller-manager-kubeconfig
         secret:
-          secretName: k8s-certs
+          secretName: controller-manager-kubeconfig
       - hostPath:
           path: /etc/ssl/certs
           type: DirectoryOrCreate
         name: ca-certs
-      - name: kubeconfig
-        configMap:
-          name: kubeconfig
       - hostPath:
           path: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
           type: DirectoryOrCreate

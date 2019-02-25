@@ -13,7 +13,8 @@ spec:
   template:
     metadata:
       annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: ""
+        # deprecated in 1.13
+        # scheduler.alpha.kubernetes.io/critical-pod: ""
       creationTimestamp: null
       labels:
         run: kube-apiserver
@@ -37,46 +38,37 @@ spec:
         - --etcd-keyfile=/etc/{{ .Values.ClusterName }}/pki/apiserver-etcd-client.key
         - --etcd-servers=https://etcd:2379
         - --insecure-port=0
-        # modified
         - --kubelet-client-certificate=/etc/{{ .Values.ClusterName }}/pki/apiserver-kubelet-client.crt
-        # modified
         - --kubelet-client-key=/etc/{{ .Values.ClusterName }}/pki/apiserver-kubelet-client.key
         - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
-        # modified
         - --proxy-client-cert-file=/etc/{{ .Values.ClusterName }}/pki/front-proxy-client.crt
-        # modified
         - --proxy-client-key-file=/etc/{{ .Values.ClusterName }}/pki/front-proxy-client.key
         - --requestheader-allowed-names=front-proxy-client
-        # modified
         - --requestheader-client-ca-file=/etc/{{ .Values.ClusterName }}/pki/front-proxy-ca.crt
         - --requestheader-extra-headers-prefix=X-Remote-Extra-
         - --requestheader-group-headers=X-Remote-Group
         - --requestheader-username-headers=X-Remote-User
-        # modified
         - --secure-port=6443
-        # modified
         - --service-account-key-file=/etc/{{ .Values.ClusterName }}/pki/sa.pub
         - --service-cluster-ip-range=10.128.0.0/16
-        # modified
         - --tls-cert-file=/etc/{{ .Values.ClusterName }}/pki/apiserver.crt
-        # modified
         - --tls-private-key-file=/etc/{{ .Values.ClusterName }}/pki/apiserver.key
         - --token-auth-file=/etc/wg-node-watcher-token
         image: {{ index .Values "images" "kube-apiserver" }}
         imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 6443
         livenessProbe:
           failureThreshold: 8
-          httpGet:
-            host: localhost
-            path: /healthz
+          # TODO: make this an HTTP health check with secure, random credentials
+          tcpSocket:
             port: 6443
-            scheme: HTTPS
           initialDelaySeconds: 15
           timeoutSeconds: 15
         name: kube-apiserver
         resources:
           requests:
-            # note that this means 1/8th of a CPU core
+            # note that this means 1/20th of a CPU core
             cpu: 50m
         volumeMounts:
         - mountPath: /etc/ca-certificates
@@ -104,7 +96,7 @@ spec:
           readOnly: true
       hostNetwork: false
       dnsPolicy: ClusterFirst
-      # modified
+      # only kube-system namespace can have this priorityClassName
       # priorityClassName: system-cluster-critical
       volumes:
       - name: k8s-certs

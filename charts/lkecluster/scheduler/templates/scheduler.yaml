@@ -1,0 +1,55 @@
+# Child cluster scheduler
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-scheduler
+  namespace: kube-system-{{ .Values.ClusterName }}
+  labels:
+    lke.linode.com/role: controlplane
+    app: kubernetes
+    component: kube-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubernetes
+      component: kube-scheduler
+  template:
+    metadata:
+      labels:
+        app: kubernetes
+        component: kube-scheduler
+      name: kube-scheduler
+      namespace: kube-system-{{ .Values.ClusterName }}
+    spec:
+      containers:
+      - command:
+        - kube-scheduler
+        - --address=127.0.0.1
+        - --kubeconfig=/etc/kubernetes/scheduler.conf
+        - --leader-elect=true
+        image: {{ index .Values "images" "kube-scheduler" }}
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 8
+          # TODO: make this an HTTP health check with secure, random, credentials
+          tcpSocket:
+            port: 10259
+          initialDelaySeconds: 15
+          timeoutSeconds: 15
+        name: kube-scheduler
+        resources:
+          requests:
+            # note this means 1/20th of a CPU
+            cpu: 50m
+        volumeMounts:
+        - mountPath: /etc/kubernetes
+          name: scheduler-kubeconfig
+          readOnly: true
+      # This priorityClassName can only be used by kube-system
+      # priorityClassName: system-cluster-critical
+      volumes:
+      - name: scheduler-kubeconfig
+        secret:
+          secretName: scheduler-kubeconfig
+
