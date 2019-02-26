@@ -1,0 +1,18 @@
+# Build the manager binary
+FROM golang:1.11.5 as builder
+RUN apt-get update
+RUN apt-get install -y curl
+RUN curl -sSL https://dl.k8s.io/release/v1.11.3/bin/linux/amd64/kubeadm > /usr/bin/kubeadm
+RUN chmod a+rx /usr/bin/kubeadm
+
+# Copy in the go src
+WORKDIR /go/src/bits.linode.com/asauber/cluster-api-provider-lke
+COPY ./go.mod  .
+COPY ./go.sum  .
+COPY cmd/    cmd/
+COPY pkg/    pkg/
+
+# Run
+ENV GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+RUN go mod download
+ENTRYPOINT ["go", "run", "./cmd/manager/main.go"]

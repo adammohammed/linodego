@@ -18,6 +18,12 @@ manager: generate fmt vet
 run: generate fmt vet
 	go run ./cmd/manager/main.go -logtostderr=true -stderrthreshold=INFO
 
+# Run in Linux container against the configured Kubernetes cluster in the file at $KUBECONFIG
+run-docker: generate fmt vet
+	kubectl apply -f ./provider-components.yaml
+	docker build -t "cluster-api-provider-lke:devel" -f Dockerfile.devel .
+	docker run --mount type=bind,src=$${KUBECONFIG},dst=/config.yaml -e KUBECONFIG=/config.yaml "cluster-api-provider-lke:devel" -- -logtostderr=true -stderrthreshold=INFO
+
 # Install CRDs into a cluster
 install: manifests
 	kubectl apply -f config/crds
