@@ -11,6 +11,7 @@ COPY ./go.mod  .
 COPY ./go.sum  .
 COPY cmd/    cmd/
 COPY pkg/    pkg/
+COPY charts/ charts/
 
 # Run
 ENV GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64
