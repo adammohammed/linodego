@@ -1,6 +1,7 @@
 
 # Image URL to use all building/pushing image targets
 IMG ?= linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:latest
+ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
 export GO111MODULE=on
 
@@ -20,9 +21,13 @@ run: generate fmt vet
 
 # Run in Linux container against the configured Kubernetes cluster in the file at $KUBECONFIG
 run-docker: generate fmt vet
+	@mkdir -p ${ROOT_DIR}/run
 	kubectl apply -f ./provider-components.yaml
 	docker build -t "cluster-api-provider-lke:devel" -f Dockerfile.devel .
-	docker run --mount type=bind,src=$${KUBECONFIG},dst=/config.yaml -e KUBECONFIG=/config.yaml "cluster-api-provider-lke:devel" -- -logtostderr=true -stderrthreshold=INFO
+	docker run -e KUBECONFIG=/root/.kube/config \
+		-v $${KUBECONFIG}:/root/.kube/config \
+		-v ${ROOT_DIR}/run:/tmp/ \
+		"cluster-api-provider-lke:devel" -- -logtostderr=true -stderrthreshold=INFO
 
 # Install CRDs into a cluster
 install: manifests
