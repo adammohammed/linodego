@@ -64,7 +64,7 @@ echo "export LINODE_TOKEN=<Your Linode API Token>" >> ~/.bash_profile
 
 * [The Linode CLI](https://www.linode.com/docs/platform/api/using-the-linode-cli/)
 
-```
+```bash
 pip install linode-cli --upgrade
 linode-cli
 ```
@@ -87,7 +87,7 @@ your new LKE cluster
 
 First, start minikube
 
-```
+```bash
 minikube start
 # As of 2018-11-06 there is a memory leak in the cluster master components that
 # may require more resources of minikube. You can start minikube with more
@@ -172,11 +172,11 @@ hack/delete_cluster.sh cluster01
 
 ## Development
 
-When using a kustomize-rendered provider-components.yaml, the
+When using a kustomize-rendered `provider-components.yaml`, the
 cluster-api-provider-linode controllers are deployed from a container
-registry (currently asauber/cluster-api-provider-linode on Docker Hub). To
+registry (currently `asauber/cluster-api-provider-linode` on Docker Hub). To
 work on development, you can use a make target which compiles and runs the
-controllers on your local machine. 
+controllers on your local machine.
 
 Follow the above instructions above to deploy the CRDs, upstream controllers,
 and other required resources to your cluster.
@@ -198,3 +198,16 @@ make run
 
 You will immediately see Info-level logging output on your terminal if you
 have deployed Cluster or Machine resources.
+
+When running from OSX, or for isolation, Docker can be used to run the controller:
+
+```bash
+make run-docker
+```
+
+### Running Tests
+
+The controller tests do not require a Kubernetes environment.
+
+* Install KubeBuilder <https://book.kubebuilder.io/getting_started/installation_and_setup.html>
+* Run `make test`

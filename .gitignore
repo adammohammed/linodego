@@ -12,7 +12,6 @@ bin/
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-provider-components.yaml
 examples/cluster.yaml
 
 *.conf
@@ -22,3 +21,5 @@ examples/cluster.yaml
 *.sw*
 
 manifests
+
+run
