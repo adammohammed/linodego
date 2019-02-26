@@ -21,3 +21,5 @@ examples/cluster.yaml
 *.sw*
 
 manifests
+
+run

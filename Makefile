@@ -27,7 +27,8 @@ run-docker: generate fmt vet
 	docker run -e KUBECONFIG=/root/.kube/config \
 		-v $${KUBECONFIG}:/root/.kube/config \
 		-v ${ROOT_DIR}/run:/tmp/ \
-		"cluster-api-provider-lke:devel" -- -logtostderr=true -stderrthreshold=INFO
+		"-ti" \
+		"cluster-api-provider-lke:devel" -logtostderr=true -stderrthreshold=INFO
 
 # Install CRDs into a cluster
 install: manifests
