@@ -24,7 +24,9 @@ run-docker: generate fmt vet
 	@mkdir -p ${ROOT_DIR}/run
 	kubectl apply -f ./provider-components.yaml
 	docker build -t "cluster-api-provider-lke:devel" -f Dockerfile.devel .
+	echo "Running the controller.. ctrl-c to stop, ctrl-z to detach (then use docker ps, docker attach, docker kill)"
 	docker run -e KUBECONFIG=/root/.kube/config \
+		--detach-keys "ctrl-z" \
 		-v $${KUBECONFIG}:/root/.kube/config \
 		-v ${ROOT_DIR}/run:/tmp/ \
 		"-ti" \
@@ -36,7 +38,6 @@ install: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	kubectl apply -f config/crds
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
