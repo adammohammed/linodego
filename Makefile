@@ -41,7 +41,8 @@ deploy: manifests
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests:
-	go run sigs.k8s.io/controller-tools/cmd/controller-gen all
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen crd --output-dir config/default/crds
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen rbac --output-dir config/default/rbac
 
 # Run go fmt against code
 fmt:
