@@ -18,15 +18,9 @@ limitations under the License.
 package linode
 
 import (
-	"fmt"
-
-	"github.com/golang/glog"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	bootstraputil "k8s.io/client-go/tools/bootstrap/token/util"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -36,40 +30,63 @@ const (
 )
 
 func getJoinToken(client client.Client, cluster *clusterv1.Cluster) (string, error) {
-	// Look for a join token secret in the namespace of the Cluster object.
-	joinTokenSecret := &corev1.Secret{}
-	err := client.Get(context.Background(),
-		types.NamespacedName{Namespace: cluster.GetNamespace(), Name: joinTokenSecretName},
-		joinTokenSecret)
+	joinTokenSecret, err := getJoinTokenSecret(client, cluster)
 
+	// If no join token exists for the cluster, generate one
 	if errors.IsNotFound(err) {
-		// If one isn't found, create one.
-		/*
-		 * TODO: Regenerate token when it expires using the --kubeconfig flag of
-		 * kubeadm token create. For now, we generate and use a static token per new
-		 * cluster which expires after 24 hours, thus not allowing new Nodes to join
-		 * the cluster after 24 hours.
-		 */
-		joinToken, err := bootstraputil.GenerateBootstrapToken()
-		if err != nil {
-			glog.Errorf("Unable to create kubeadm join token: %v", err)
-			return "", err
-		}
-		joinTokenSecret.ObjectMeta = metav1.ObjectMeta{
-			Namespace: cluster.GetNamespace(),
-			Name:      joinTokenSecretName,
-		}
-		joinTokenSecret.Type = corev1.SecretTypeOpaque
-		joinTokenSecret.Data = map[string][]byte{
-			"token": []byte(joinToken),
-		}
-		err = client.Create(context.Background(), joinTokenSecret)
-		if err != nil {
-			return "", fmt.Errorf("error creating join token secret for cluster")
-		}
+		return generateJoinToken(client, cluster)
 	} else if err != nil {
-		return "", fmt.Errorf("error getting join token for cluster: %v", err)
+		return "", fmt.Errorf(
+			"Error retrieving join token secret for cluster (%v): %v",
+			cluster.Name, err)
 	}
 
-	return string(joinTokenSecret.Data["token"]), nil
+	// If a join token does exist and it's not expired, return it
+	if !joinTokenExpired(joinTokenSecret) {
+		return string(joinTokenSecret.Data["token"]), nil
+	}
+
+	// If a join token exists and is expired, generate one
+	return generateJoinToken(client, cluster)
+}
+
+func getJoinTokenSecret(client client.Client, cluster *clusterv1.Cluster) (*corev1.Secret, error) {
+	// Look for a join token secret in the namespace of the Cluster object.
+	joinTokenSecret := &corev1.Secret{}
+	if err := client.Get(context.Background(),
+		types.NamespacedName{Namespace: cluster.GetNamespace(), Name: joinTokenSecretName},
+		joinTokenSecret); err != nil {
+		return nil, err
+	}
+	return joinTokenSecret, nil
+}
+
+func generateJoinToken(client client.Client, cluster *clusterv1.Cluster) (string, error) {
+	adminKubeconfig = getAdminKubeconfig(clusterNamespace)
+
+	# no admin Kubeconfig, create a random join token to be used by the master machine init script
+	if not adminKubeconfig:
+		return generateJoinTokenForMachineMaster(clusterNamespace)
+
+	return generateJoinTokenForCPCMaster(clusterNamespace)
+
+	// If one isn't found, create one.
+	joinToken, err := bootstraputil.GenerateBootstrapToken()
+	if err != nil {
+		glog.Errorf("Unable to create kubeadm join token: %v", err)
+		return "", err
+	}
+	joinTokenSecret.ObjectMeta = metav1.ObjectMeta{
+		Namespace: cluster.GetNamespace(),
+		Name:      joinTokenSecretName,
+	}
+	joinTokenSecret.Type = corev1.SecretTypeOpaque
+	joinTokenSecret.Data = map[string][]byte{
+		"token": []byte(joinToken),
+	}
+	err = client.Create(context.Background(), joinTokenSecret)
+	if err != nil {
+		return "", fmt.Errorf("error creating join token secret for cluster")
+	}
+	return "", nil
 }
