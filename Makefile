@@ -20,17 +20,18 @@ run: generate fmt vet
 	go run ./cmd/manager/main.go -logtostderr=true -stderrthreshold=INFO
 
 # Run in Linux container against the configured Kubernetes cluster in the file at $KUBECONFIG
+# Do not push and run this image from Kubernetes by image name, it will run out of threads while compiling :-)
 run-docker: generate fmt vet
 	@mkdir -p ${ROOT_DIR}/run
 	kubectl apply -f ./provider-components.yaml
-	docker build -t "cluster-api-provider-lke:devel" -f Dockerfile.devel .
+	docker build -t "cluster-api-provider-lke:devel-run" -f Dockerfile.devel .
 	echo "Running the controller.. ctrl-c to stop, ctrl-z to detach (then use docker ps, docker attach, docker kill)"
 	docker run -e KUBECONFIG=/root/.kube/config \
 		--detach-keys "ctrl-z" \
 		-v $${KUBECONFIG}:/root/.kube/config \
 		-v ${ROOT_DIR}/run:/tmp/ \
 		"-ti" \
-		"cluster-api-provider-lke:devel" -logtostderr=true -stderrthreshold=INFO
+		"cluster-api-provider-lke:devel-run" -logtostderr=true -stderrthreshold=INFO
 
 # Install CRDs into a cluster
 install: manifests
