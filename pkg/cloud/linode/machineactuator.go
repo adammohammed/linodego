@@ -140,7 +140,7 @@ func (lc *LinodeClient) Create(ctx context.Context, cluster *clusterv1.Cluster, 
 			return err
 		}
 
-		token, err := getJoinToken(lc.client, cluster)
+		token, err := getJoinToken(lc.client, cluster.Name)
 		if err != nil {
 			return err
 		}
