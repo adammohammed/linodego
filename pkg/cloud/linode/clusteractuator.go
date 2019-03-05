@@ -39,7 +39,7 @@ const (
 	cmChartPath               = lkeclusterPath + "/" + "controller-manager"
 	schedChartPath            = lkeclusterPath + "/" + "scheduler"
 
-	kubeletResourcesPath      = lkeclusterPath + "/" + "kubelet-resources"
+	kubeletResourcesPath = lkeclusterPath + "/" + "kubelet-resources"
 )
 
 type LinodeClusterClient struct {

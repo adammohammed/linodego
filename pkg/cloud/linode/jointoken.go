@@ -18,58 +18,75 @@ limitations under the License.
 package linode
 
 import (
+	"bytes"
 	"fmt"
-	//"golang.org/x/net/context"
-	//corev1 "k8s.io/api/core/v1"
-	//"k8s.io/apimachinery/pkg/types"
-	//clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
+	"os"
+	"os/exec"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
+
+	"github.com/golang/glog"
 )
 
-func getJoinToken(client client.Client, cluster string) (string, error) {
+// run_prog executes a local process prog and returns the standard output of that
+// process and an error, if any.
+func run_prog(prog string, args ...string) (string, error) {
+	glog.Infof("running cmd='%s' args=%v", prog, args)
+
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command(prog, args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+
+	outStr, errStr := string(stdout.Bytes()), string(stderr.Bytes())
+	if outStr != "" {
+		glog.Infof("%s: STDOUT='%s'", prog, strings.TrimSpace(outStr))
+	}
+	if errStr != "" {
+		glog.Infof("%s: STDERR='%s'", prog, strings.TrimSpace(errStr))
+	}
+
+	return outStr, err
+}
+
+// system runs a command like system(3), but also accepts formatting arguments
+func system(cmd_format string, args ...interface{}) (string, error) {
+	return run_prog("bash", "-c", fmt.Sprintf(cmd_format, args...))
+}
+
+/*
+ * getJoinToken returns a valid bootstrap token for a LKE cluster specified in
+ * the command line arguments. If token doesn't exist, the function creates it.
+ * The function also tries to remove all expired tokens from the cluster.
+ */
+func getJoinToken(cpcClient client.Client, cluster string) (string, error) {
 
 	/*
-		API implementation:
-
-		List all secrets of type "bootstrap.kubernetes.io/token"
-		Delete each secret which is expired (data.expiration < current time)
-		If there are no secrets left, then create one (the easiest way is still to use `kubeadm --kubeconfig <config> token create`)
-	*/
-
-	/*
-		Kubeadm implementation:
-
-		Delete '<invalid>' tokens:
-		kubeadm --kubeconfig <config> token list | awk '$2 == "<invalid>" { system("kubeadm --kubeconfig <config> token delete " $1) }'
-
-		Gimme first non-expired token:
-		kubeadm --kubeconfig <config> token list | awk 'NR>1 && !($2=="<invalid>") {print $1; exit}'
-
-		If empty, then
-		kubeadm --kubeconfig <config> token create
-	*/
-
-	return "", fmt.Errorf("KRISPY")
+	 * A temporary kube config, as kubeadm requires a file argument
+	 */
+	kubeconfig, err := tempKubeconfig(cpcClient, cluster)
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(kubeconfig)
 
 	/*
-		joinTokenSecret, err := getJoinTokenSecret(client, cluster)
+	 * Delete all tokens which had expired since we are here.
+	 * Such tokens are marked as <invalid> by kubeadm
+	 */
+	if _, err := system("kubeadm --kubeconfig %[1]s token list | awk '$2 == \"<invalid>\" { system(\"kubeadm --kubeconfig %[1]s token delete \" $1) }'", kubeconfig); err != nil {
+		return "", err
+	}
 
-		// If no join token exists for the cluster, generate one
-		if errors.IsNotFound(err) {
-			return generateJoinToken(client, cluster)
-		} else if err != nil {
-			return "", fmt.Errorf(
-				"Error retrieving join token secret for cluster (%v): %v",
-				cluster.Name, err)
-		}
+	/* get the first non-expired token */
+	token, err := system("kubeadm --kubeconfig %s token list | awk 'NR>1 && !($2==\"<invalid>\") {print $1; exit}'", kubeconfig)
+	if err != nil {
+		return "", err
+	} else if token != "" {
+		return token, nil
+	}
 
-		// If a join token does exist and it's not expired, return it
-		if !joinTokenExpired(joinTokenSecret) {
-			return string(joinTokenSecret.Data["token"]), nil
-		}
-
-		// If a join token exists and is expired, generate one
-		return generateJoinToken(client, cluster)
-
-	*/
+	/* didn't find a token, try to create it */
+	return system("kubeadm --kubeconfig %s token create --ttl 1h", kubeconfig)
 }
