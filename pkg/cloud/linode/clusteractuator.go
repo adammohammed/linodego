@@ -19,6 +19,7 @@ package linode
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
@@ -101,6 +102,10 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 	}
 
 	if err := lcc.reconcileKubeletResources(cluster); err != nil {
+		return err
+	}
+
+	if err := lcc.reconcileAddonsAndConfigmaps(cluster, ip); err != nil {
 		return err
 	}
 
@@ -233,6 +238,45 @@ func (lcc *LinodeClusterClient) reconcileKubeletResources(cluster *clusterv1.Clu
 
 	if err := chartDeployerLKE.DeployChart(kubeletResourcesPath, "kube-system", map[string]interface{}{}); err != nil {
 		glog.Errorf("Error reconciling kubelet resources for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	return nil
+}
+
+/*
+ * reconcileAddonsAndConfigmaps deploys kube-proxy and coredns addons, an
+ * initial bootstrap token, kubeadm config, and some additional resources
+ * This is done by executing the following commands:
+ *
+ *   export ka='kubeadm --kubeconfig <config>'
+ *   $ka init phase bootstrap-token
+ *   $ka init phase addon kube-proxy --apiserver-advertise-address <lb-IP-address> --pod-network-cidr 10.2.0.0/16
+ *   $ka init phase upload-config kubeadm
+ *   $ka init phase addon coredns --service-cidr 10.128.0.0/16
+ */
+func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(cluster *clusterv1.Cluster, ip string) error {
+	glog.Infof("Reconciling kubelet resources for cluster %v.", cluster.Name)
+
+	kubeconfig, err := tempKubeconfig(lcc.client, cluster.Name)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(kubeconfig)
+
+	if _, err := system("kubeadm --kubeconfig %s init phase bootstrap-token", kubeconfig); err != nil {
+		return err
+	}
+
+	if _, err := system("kubeadm --kubeconfig %s init phase addon kube-proxy --apiserver-advertise-address %s --pod-network-cidr 10.2.0.0/16", kubeconfig, ip); err != nil {
+		return err
+	}
+
+	if _, err := system("kubeadm --kubeconfig %s init phase upload-config kubeadm", kubeconfig); err != nil {
+		return err
+	}
+
+	if _, err := system("kubeadm --kubeconfig %s init phase addon coredns --service-cidr 10.128.0.0/16", kubeconfig); err != nil {
 		return err
 	}
 
