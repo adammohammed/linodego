@@ -75,7 +75,8 @@ func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
 func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster) error {
 	glog.Infof("Reconciling control plane for cluster %v.", cluster.Name)
 
-	if err := lcc.reconcileAPIServerService(cluster); err != nil {
+	ip, err := lcc.reconcileAPIServerService(cluster)
+	if err != nil {
 		return err
 	}
 
@@ -83,7 +84,7 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 		return err
 	}
 
-	if err := lcc.reconcileAPIServer(cluster); err != nil {
+	if err := lcc.reconcileAPIServer(cluster, ip); err != nil {
 		return err
 	}
 
@@ -106,7 +107,7 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 	return nil
 }
 
-func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Cluster) error {
+func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Cluster) (string, error) {
 	glog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
 	// TODO: validate that API Server has an endpoint and return one if it does
 
@@ -117,7 +118,7 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 	}
 
 	if err := lcc.chartDeployer.DeployChart(apiserverServiceChartPath, cluster.Name, values); err != nil {
-		return fmt.Errorf("Error reconciling apiserver service for cluster %v: %v", cluster.Name, err)
+		return "", fmt.Errorf("Error reconciling apiserver service for cluster %v: %v", cluster.Name, err)
 	}
 
 	// Get the hostname or IP address of the LoadBalancer
@@ -126,20 +127,20 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 		types.NamespacedName{Namespace: cluster.GetNamespace(), Name: "kube-apiserver"},
 		apiserverService)
 	if err != nil {
-		return fmt.Errorf("Could not find kube-apiserver Service for cluster %v", cluster.Name)
+		return "", fmt.Errorf("Could not find kube-apiserver Service for cluster %v", cluster.Name)
 	}
 	glog.Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiserverService.Name)
 	if len(apiserverService.Status.LoadBalancer.Ingress) < 1 {
-		return fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
+		return "", fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
 	}
 	ip := apiserverService.Status.LoadBalancer.Ingress[0].IP
 
 	// Write that NodeBalancer address as the cluster API endpoint
 	glog.Infof("External IP for kube-apiserver for cluster %v: %v", cluster.Name, ip)
 	if err := lcc.writeClusterEndpoint(cluster, ip); err != nil {
-		return err
+		return "", err
 	}
-	return nil
+	return ip, nil
 }
 
 func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster, ip string) error {
@@ -154,13 +155,14 @@ func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster,
 	return nil
 }
 
-func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster) error {
+func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster, ip string) error {
 	glog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
 	// TODO: validate that API Server is running for the cluster
 
 	// Deploy API Server for the LKE cluster
 	values := map[string]interface{}{
-		"ClusterName": cluster.Name,
+		"ClusterName":      cluster.Name,
+		"AdvertiseAddress": ip,
 	}
 
 	if err := lcc.chartDeployer.DeployChart(apiserverChartPath, cluster.Name, values); err != nil {
