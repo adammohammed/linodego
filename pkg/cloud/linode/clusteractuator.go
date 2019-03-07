@@ -41,6 +41,7 @@ const (
 	schedChartPath            = lkeclusterPath + "/" + "scheduler"
 
 	kubeletResourcesPath = lkeclusterPath + "/" + "kubelet-resources"
+	cniResourcesPath     = lkeclusterPath + "/" + "cni"
 )
 
 type LinodeClusterClient struct {
@@ -106,6 +107,10 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 	}
 
 	if err := lcc.reconcileAddonsAndConfigmaps(cluster, ip); err != nil {
+		return err
+	}
+
+	if err := lcc.reconcileCNI(cluster); err != nil {
 		return err
 	}
 
@@ -277,6 +282,23 @@ func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(cluster *clusterv1.
 	}
 
 	if _, err := system("kubeadm --kubeconfig %s init phase addon coredns --service-cidr 10.128.0.0/16", kubeconfig); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (lcc *LinodeClusterClient) reconcileCNI(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling CNI for cluster %v.", cluster.Name)
+
+	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
+	if err != nil {
+		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	if err := chartDeployerLKE.DeployChart(cniResourcesPath, "kube-system", map[string]interface{}{}); err != nil {
+		glog.Errorf("Error reconciling CNI for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
