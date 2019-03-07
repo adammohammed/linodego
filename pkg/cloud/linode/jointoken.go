@@ -18,58 +18,75 @@ limitations under the License.
 package linode
 
 import (
+	"bytes"
 	"fmt"
+	"os"
+	"os/exec"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 
 	"github.com/golang/glog"
-	"golang.org/x/net/context"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	bootstraputil "k8s.io/client-go/tools/bootstrap/token/util"
-	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	joinTokenSecretName = "kubeadm-join-token"
-)
+// run_prog executes a local process prog and returns the standard output of that
+// process and an error, if any.
+func run_prog(prog string, args ...string) (string, error) {
+	glog.Infof("running cmd='%s' args=%v", prog, args)
 
-func getJoinToken(client client.Client, cluster *clusterv1.Cluster) (string, error) {
-	// Look for a join token secret in the namespace of the Cluster object.
-	joinTokenSecret := &corev1.Secret{}
-	err := client.Get(context.Background(),
-		types.NamespacedName{Namespace: cluster.GetNamespace(), Name: joinTokenSecretName},
-		joinTokenSecret)
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command(prog, args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
 
-	if errors.IsNotFound(err) {
-		// If one isn't found, create one.
-		/*
-		 * TODO: Regenerate token when it expires using the --kubeconfig flag of
-		 * kubeadm token create. For now, we generate and use a static token per new
-		 * cluster which expires after 24 hours, thus not allowing new Nodes to join
-		 * the cluster after 24 hours.
-		 */
-		joinToken, err := bootstraputil.GenerateBootstrapToken()
-		if err != nil {
-			glog.Errorf("Unable to create kubeadm join token: %v", err)
-			return "", err
-		}
-		joinTokenSecret.ObjectMeta = metav1.ObjectMeta{
-			Namespace: cluster.GetNamespace(),
-			Name:      joinTokenSecretName,
-		}
-		joinTokenSecret.Type = corev1.SecretTypeOpaque
-		joinTokenSecret.Data = map[string][]byte{
-			"token": []byte(joinToken),
-		}
-		err = client.Create(context.Background(), joinTokenSecret)
-		if err != nil {
-			return "", fmt.Errorf("error creating join token secret for cluster")
-		}
-	} else if err != nil {
-		return "", fmt.Errorf("error getting join token for cluster: %v", err)
+	outStr, errStr := string(stdout.Bytes()), string(stderr.Bytes())
+	if outStr != "" {
+		glog.Infof("%s: STDOUT='%s'", prog, strings.TrimSpace(outStr))
+	}
+	if errStr != "" {
+		glog.Infof("%s: STDERR='%s'", prog, strings.TrimSpace(errStr))
 	}
 
-	return string(joinTokenSecret.Data["token"]), nil
+	return outStr, err
+}
+
+// system runs a command like system(3), but also accepts formatting arguments
+func system(cmd_format string, args ...interface{}) (string, error) {
+	return run_prog("bash", "-c", fmt.Sprintf(cmd_format, args...))
+}
+
+/*
+ * getJoinToken returns a valid bootstrap token for a LKE cluster specified in
+ * the command line arguments. If token doesn't exist, the function creates it.
+ * The function also tries to remove all expired tokens from the cluster.
+ */
+func getJoinToken(cpcClient client.Client, cluster string) (string, error) {
+
+	/*
+	 * A temporary kube config, as kubeadm requires a file argument
+	 */
+	kubeconfig, err := tempKubeconfig(cpcClient, cluster)
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(kubeconfig)
+
+	/*
+	 * Delete all tokens which had expired since we are here.
+	 * Such tokens are marked as <invalid> by kubeadm
+	 */
+	if _, err := system("kubeadm --kubeconfig %[1]s token list | awk '$2 == \"<invalid>\" { system(\"kubeadm --kubeconfig %[1]s token delete \" $1) }'", kubeconfig); err != nil {
+		return "", err
+	}
+
+	/* get the first non-expired token */
+	token, err := system("kubeadm --kubeconfig %s token list | awk 'NR>1 && !($2==\"<invalid>\") {print $1; exit}'", kubeconfig)
+	if err != nil {
+		return "", err
+	} else if token != "" {
+		return token, nil
+	}
+
+	/* didn't find a token, try to create it */
+	return system("kubeadm --kubeconfig %s token create --ttl 1h", kubeconfig)
 }

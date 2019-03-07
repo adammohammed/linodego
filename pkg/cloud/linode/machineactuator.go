@@ -115,6 +115,14 @@ func (lc *LinodeClient) validateMachine(machine *clusterv1.Machine, config *lkec
 }
 
 func (lc *LinodeClient) Create(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
+
+	err := lc.create(ctx, cluster, machine)
+	glog.Infof("creating machine %v/%v: err=%v", cluster.Name, machine.Name, err)
+	return err
+
+}
+
+func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 	glog.Infof("Creating machine %v/%v", cluster.Name, machine.Name)
 
 	instance, err := lc.instanceIfExists(cluster, machine)
@@ -140,7 +148,7 @@ func (lc *LinodeClient) Create(ctx context.Context, cluster *clusterv1.Cluster, 
 			return err
 		}
 
-		token, err := getJoinToken(lc.client, cluster)
+		token, err := getJoinToken(lc.client, cluster.Name)
 		if err != nil {
 			return err
 		}

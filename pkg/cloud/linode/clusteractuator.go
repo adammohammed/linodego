@@ -38,6 +38,8 @@ const (
 	apiserverChartPath        = lkeclusterPath + "/" + "apiserver"
 	cmChartPath               = lkeclusterPath + "/" + "controller-manager"
 	schedChartPath            = lkeclusterPath + "/" + "scheduler"
+
+	kubeletResourcesPath = lkeclusterPath + "/" + "kubelet-resources"
 )
 
 type LinodeClusterClient struct {
@@ -94,6 +96,10 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 	}
 
 	if err := lcc.reconcileScheduler(cluster); err != nil {
+		return err
+	}
+
+	if err := lcc.reconcileKubeletResources(cluster); err != nil {
 		return err
 	}
 
@@ -211,6 +217,23 @@ func (lcc *LinodeClusterClient) reconcileScheduler(cluster *clusterv1.Cluster) e
 	if err := lcc.chartDeployer.DeployChart(schedChartPath, cluster.Name, values); err != nil {
 		glog.Errorf("Error reconciling scheduler for cluster %v: %v", cluster.Name, err)
 
+		return err
+	}
+
+	return nil
+}
+
+func (lcc *LinodeClusterClient) reconcileKubeletResources(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling kubelet resources for cluster %v.", cluster.Name)
+
+	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
+	if err != nil {
+		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	if err := chartDeployerLKE.DeployChart(kubeletResourcesPath, "kube-system", map[string]interface{}{}); err != nil {
+		glog.Errorf("Error reconciling kubelet resources for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 

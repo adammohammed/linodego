@@ -64,12 +64,6 @@ type certsInit = struct {
 	dir string
 }
 
-/* Temporarily holds kubeconfigs for a cluster */
-type kubeconfigInit = struct {
-	/* directory containing kubeconfigs, e.g. "/tmp/<cluster>/" */
-	dir string
-}
-
 func run(prog string, args ...string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(prog, args...)
@@ -178,15 +172,17 @@ func generateCertsInit(client client.Client, cluster *clusterv1.Cluster) (*certs
 		return nil, err
 	}
 
+	// Generate PKI material with the `kubeadm init phase certs` command
 	if config, err := createKubeadmFile(client, dirname, cluster); err != nil {
 		return nil, err
 	} else if _, err := run("kubeadm", "init", "phase", "certs", "all", "--config", config); err != nil {
 		return nil, err
 	}
 
-	/* Don't walk up the directory tree to place the kubeconfigs, keep
-	 * things rooted at the specified directory */
+	// Don't walk up the directory tree to place the kubeconfigs, keep
+	// things rooted at the specified directory
 	kubeconfigDir := dirname + "/kubeconfigs"
+	// Generate client kubeconfigs with the `kubeadm init phase kubeconfig` command
 	if _, err := run("kubeadm", "init", "phase", "kubeconfig", "all",
 		"--kubeconfig-dir", kubeconfigDir,
 		"--cert-dir", dirname,
@@ -319,14 +315,18 @@ func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster) error
 
 	ns := cluster.GetNamespace()
 
+	// Write secrets for the core k8s PKI material
 	if err := createOpaqueSecret(client, ns, "k8s-certs", k8sCerts); err != nil {
 		return err
 	}
 
+	// Write secrets for the etcd PKI material
 	if err := createOpaqueSecret(client, ns, "etcd-certs", etcdCerts); err != nil {
 		return err
 	}
 
+	// Write secrets for each of the client kubeconfigs that we generated for
+	// the admin, controller-manager, scheduler, and kubelet
 	for secretName, secretMap := range kubeconfigs {
 		if err := createOpaqueSecret(client, ns, secretName, secretMap); err != nil {
 			return err
@@ -334,21 +334,6 @@ func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster) error
 	}
 
 	return nil
-}
-
-func generateKubeconfigsInit(client client.Client, cluster *clusterv1.Cluster) (*certsInit, error) {
-	dirname := "/tmp/" + cluster.Name + "/kubeconfigs"
-	if err := os.MkdirAll(dirname, os.ModePerm); err != nil {
-		return nil, err
-	}
-
-	if config, err := createKubeadmFile(client, dirname, cluster); err != nil {
-		return nil, err
-	} else if _, err := run("kubeadm", "init", "phase", "certs", "all", "--config", config); err != nil {
-		return nil, err
-	}
-
-	return &certsInit{dir: dirname}, nil
 }
 
 /*
