@@ -149,10 +149,7 @@ func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster,
 		Host: ip,
 		Port: 6443,
 	}}
-	if err := lcc.client.Update(context.Background(), cluster); err != nil {
-		return err
-	}
-	return nil
+	return lcc.client.Status().Update(context.TODO(), cluster)
 }
 
 func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster, ip string) error {
