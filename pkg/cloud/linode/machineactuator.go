@@ -49,7 +49,7 @@ const (
 	createEventAction             = "Create"
 	deleteEventAction             = "Delete"
 	noEventAction                 = ""
-	linodeAPITokenSecretName      = "linode-api-token"
+	linodeAPITokenSecretName      = "linode"
 	machineLinodeIDAnnotationName = "linode-id"
 )
 
