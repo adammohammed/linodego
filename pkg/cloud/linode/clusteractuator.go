@@ -42,6 +42,7 @@ const (
 
 	kubeletResourcesPath = lkeclusterPath + "/" + "kubelet-resources"
 	cniResourcesPath     = lkeclusterPath + "/" + "cni"
+	ccmChartPath         = lkeclusterPath + "/" + "ccm"
 )
 
 type LinodeClusterClient struct {
@@ -111,6 +112,10 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 	}
 
 	if err := lcc.reconcileCNI(cluster); err != nil {
+		return err
+	}
+
+	if err := lcc.reconcileCCM(cluster); err != nil {
 		return err
 	}
 
@@ -299,6 +304,20 @@ func (lcc *LinodeClusterClient) reconcileCNI(cluster *clusterv1.Cluster) error {
 
 	if err := chartDeployerLKE.DeployChart(cniResourcesPath, "kube-system", map[string]interface{}{}); err != nil {
 		glog.Errorf("Error reconciling CNI for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	return nil
+}
+
+func (lcc *LinodeClusterClient) reconcileCCM(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling CCM for cluster %v.", cluster.Name)
+
+	values := map[string]interface{}{}
+
+	if err := lcc.chartDeployer.DeployChart(ccmChartPath, cluster.Name, values); err != nil {
+		glog.Errorf("Error reconciling CCM for cluster %v: %v", cluster.Name, err)
+
 		return err
 	}
 
