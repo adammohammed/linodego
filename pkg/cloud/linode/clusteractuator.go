@@ -25,7 +25,9 @@ import (
 	"golang.org/x/net/context"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/clientcmd"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -43,6 +45,8 @@ const (
 	kubeletResourcesPath = lkeclusterPath + "/" + "kubelet-resources"
 	cniResourcesPath     = lkeclusterPath + "/" + "cni"
 	ccmChartPath         = lkeclusterPath + "/" + "ccm"
+
+	csiResourcePath = lkeclusterPath + "/" + "csi/lke"
 )
 
 type LinodeClusterClient struct {
@@ -116,6 +120,10 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 	}
 
 	if err := lcc.reconcileCCM(cluster); err != nil {
+		return err
+	}
+
+	if err := lcc.reconcileCSI(cluster); err != nil {
 		return err
 	}
 
@@ -318,6 +326,71 @@ func (lcc *LinodeClusterClient) reconcileCCM(cluster *clusterv1.Cluster) error {
 	if err := lcc.chartDeployer.DeployChart(ccmChartPath, cluster.Name, values); err != nil {
 		glog.Errorf("Error reconciling CCM for cluster %v: %v", cluster.Name, err)
 
+		return err
+	}
+
+	return nil
+}
+
+// creates a new client for LKE
+func lkeClientNew(cpcClient client.Client, cluster string) (client.Client, error) {
+	kubeconfig, err := tempKubeconfig(cpcClient, cluster)
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(kubeconfig)
+
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	return client.New(config, client.Options{})
+}
+
+// copies the 'kube-system-<cluster>/linode' secret in CPC to the
+// 'kube-system/linode' secret in LKE cluster <cluster>
+func copyLinodeSecret(cpcClient, lkeClient client.Client, namespace string) error {
+
+	secret := &corev1.Secret{}
+	if err := cpcClient.Get(context.Background(), types.NamespacedName{Namespace: namespace, Name: "linode"}, secret); err != nil {
+		return err
+	}
+
+	lkeSecret := &corev1.Secret{}
+	lkeSecret.ObjectMeta = metav1.ObjectMeta{
+		Namespace: "kube-system",
+		Name:      "linode",
+	}
+	lkeSecret.Type = corev1.SecretTypeOpaque
+	lkeSecret.Data = secret.Data // note: not a deep copy
+
+	return lkeClient.Create(context.Background(), lkeSecret)
+}
+
+func (lcc *LinodeClusterClient) reconcileCSI(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling CSI for cluster %v.", cluster.Name)
+
+	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
+	if err != nil {
+		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	lkeClient, err := lkeClientNew(lcc.client, cluster.Name)
+	if err != nil {
+		return err
+	}
+
+	// Copy linode secret from CPC to LKE
+	if err := copyLinodeSecret(lcc.client, lkeClient, clusterNamespace(cluster.Name)); err != nil {
+		glog.Errorf("Error creating a linode secret in the LKE %v: %v", cluster.Name, err)
+		return err
+	}
+
+	values := map[string]interface{}{}
+
+	if err := chartDeployerLKE.DeployChart(csiResourcePath, "kube-system", values); err != nil {
+		glog.Errorf("Error reconciling CSI for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
