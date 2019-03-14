@@ -25,8 +25,9 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: linode-api-token
+  name: linode
   namespace: $CLUSTER_NAME
 type: Opaque
 data:
   token: $LINODE_TOKEN
+  region: $LINODE_REGION

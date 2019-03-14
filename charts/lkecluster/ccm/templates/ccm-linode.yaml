@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ccm-linode
+  labels:
+    app: ccm-linode
+  namespace: kube-system-{{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ccm-linode
+  template:
+    metadata:
+      labels:
+        app: ccm-linode
+    spec:
+      tolerations:
+        # The CCM is a "critical addon"
+        - key: "CriticalAddonsOnly"
+          operator: "Exists"
+        # This taint is set on all Nodes when an external CCM is used
+        - key: node.cloudprovider.kubernetes.io/uninitialized
+          value: "true"
+          effect: NoSchedule
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoSchedule
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoSchedule
+      hostNetwork: true
+      containers:
+        - image: linode/linode-cloud-controller-manager:canary
+          imagePullPolicy: Always
+          name: ccm-linode
+          args:
+          - --cloud-provider=linode
+          - --v=3
+          - --kubeconfig=/etc/kubernetes/admin.conf
+          volumeMounts:
+          - mountPath: /etc/kubernetes
+            name: k8s-admin
+          env:
+            - name: LINODE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: token
+            - name: LINODE_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: region
+      volumes:
+      - name: k8s-admin
+        secret:
+          secretName: admin-kubeconfig

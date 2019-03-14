@@ -27,7 +27,7 @@ spec:
       - command:
         - kube-apiserver
         - --authorization-mode=Node,RBAC
-        - --advertise-address=0.0.0.0
+        - --advertise-address={{ .Values.AdvertiseAddress }}
         - --allow-privileged=true
         - --client-ca-file=/etc/{{ .Values.ClusterName }}/pki/ca.crt
         - --disable-admission-plugins=PersistentVolumeLabel

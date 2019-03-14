@@ -49,7 +49,7 @@ const (
 	createEventAction             = "Create"
 	deleteEventAction             = "Delete"
 	noEventAction                 = ""
-	linodeAPITokenSecretName      = "linode-api-token"
+	linodeAPITokenSecretName      = "linode"
 	machineLinodeIDAnnotationName = "linode-id"
 )
 
@@ -180,7 +180,7 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 			Label:           lc.MachineLabel(cluster, machine),
 			Image:           machineConfig.Image,
 			RootPass:        rootPass,
-			PrivateIP:       false,
+			PrivateIP:       true,
 			StackScriptID:   initScript.stackScript.ID,
 			StackScriptData: initScript.stackScriptData,
 			AuthorizedKeys:  clusterConfig.AuthorizedKeys,

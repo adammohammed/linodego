@@ -47,7 +47,7 @@ func run_prog(prog string, args ...string) (string, error) {
 		glog.Infof("%s: STDERR='%s'", prog, strings.TrimSpace(errStr))
 	}
 
-	return outStr, err
+	return strings.TrimSpace(outStr), err
 }
 
 // system runs a command like system(3), but also accepts formatting arguments

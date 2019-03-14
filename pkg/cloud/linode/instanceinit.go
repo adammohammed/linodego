@@ -376,7 +376,8 @@ apt-mark hold kubeadm kubelet kubectl
 
 # TODO: Disable password login
 
-# TODO: Modify kubelet configuration for custom service domain
+# Let CCM to make its work
+echo "KUBELET_EXTRA_ARGS=--cloud-provider=external" > /etc/default/kubelet
 
 kubeadm join --token "${TOKEN}" "${ENDPOINT}" --ignore-preflight-errors=all --discovery-token-unsafe-skip-ca-verification
 

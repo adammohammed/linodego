@@ -11,14 +11,17 @@ Second argument must be a name for the cluster, for example:
 ./generate-yaml.sh \$HOME/.ssh/id_rsa.pub cluster01"
 
 [ -z "${LINODE_TOKEN}" ] && die "\$LINODE_TOKEN must be set to a Linode API token"
+[ -z "${LINODE_REGION}" ] && die "\$LINODE_REGION must be set to a Linode Region ID"
 
 PUBLIC_KEY=$(cat $1)
 CLUSTER_NAME=$2
 ENCODED_TOKEN=$(echo -n $LINODE_TOKEN | base64)
+ENCODED_REGION=$(echo -n $LINODE_REGION | base64)
 
 cat cluster.yaml.template |
 sed -e "s|\$SSH_PUBLIC_KEY|$(cat $1)|" |
 sed -e "s|\$LINODE_TOKEN|$ENCODED_TOKEN|" |
+sed -e "s|\$LINODE_REGION|$ENCODED_REGION|" |
 sed -e "s|\$CLUSTER_NAME|$CLUSTER_NAME|" > cluster.yaml
 
 cat master.yaml.template |

@@ -19,12 +19,15 @@ package linode
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/clientcmd"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -40,6 +43,10 @@ const (
 	schedChartPath            = lkeclusterPath + "/" + "scheduler"
 
 	kubeletResourcesPath = lkeclusterPath + "/" + "kubelet-resources"
+	cniResourcesPath     = lkeclusterPath + "/" + "cni"
+	ccmChartPath         = lkeclusterPath + "/" + "ccm"
+
+	csiResourcePath = lkeclusterPath + "/" + "csi/lke"
 )
 
 type LinodeClusterClient struct {
@@ -75,7 +82,8 @@ func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
 func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster) error {
 	glog.Infof("Reconciling control plane for cluster %v.", cluster.Name)
 
-	if err := lcc.reconcileAPIServerService(cluster); err != nil {
+	ip, err := lcc.reconcileAPIServerService(cluster)
+	if err != nil {
 		return err
 	}
 
@@ -83,7 +91,7 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 		return err
 	}
 
-	if err := lcc.reconcileAPIServer(cluster); err != nil {
+	if err := lcc.reconcileAPIServer(cluster, ip); err != nil {
 		return err
 	}
 
@@ -103,10 +111,26 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 		return err
 	}
 
+	if err := lcc.reconcileAddonsAndConfigmaps(cluster, ip); err != nil {
+		return err
+	}
+
+	if err := lcc.reconcileCNI(cluster); err != nil {
+		return err
+	}
+
+	if err := lcc.reconcileCCM(cluster); err != nil {
+		return err
+	}
+
+	if err := lcc.reconcileCSI(cluster); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Cluster) error {
+func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Cluster) (string, error) {
 	glog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
 	// TODO: validate that API Server has an endpoint and return one if it does
 
@@ -117,7 +141,7 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 	}
 
 	if err := lcc.chartDeployer.DeployChart(apiserverServiceChartPath, cluster.Name, values); err != nil {
-		return fmt.Errorf("Error reconciling apiserver service for cluster %v: %v", cluster.Name, err)
+		return "", fmt.Errorf("Error reconciling apiserver service for cluster %v: %v", cluster.Name, err)
 	}
 
 	// Get the hostname or IP address of the LoadBalancer
@@ -126,20 +150,20 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 		types.NamespacedName{Namespace: cluster.GetNamespace(), Name: "kube-apiserver"},
 		apiserverService)
 	if err != nil {
-		return fmt.Errorf("Could not find kube-apiserver Service for cluster %v", cluster.Name)
+		return "", fmt.Errorf("Could not find kube-apiserver Service for cluster %v", cluster.Name)
 	}
 	glog.Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiserverService.Name)
 	if len(apiserverService.Status.LoadBalancer.Ingress) < 1 {
-		return fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
+		return "", fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
 	}
 	ip := apiserverService.Status.LoadBalancer.Ingress[0].IP
 
 	// Write that NodeBalancer address as the cluster API endpoint
 	glog.Infof("External IP for kube-apiserver for cluster %v: %v", cluster.Name, ip)
 	if err := lcc.writeClusterEndpoint(cluster, ip); err != nil {
-		return err
+		return "", err
 	}
-	return nil
+	return ip, nil
 }
 
 func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster, ip string) error {
@@ -148,19 +172,17 @@ func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster,
 		Host: ip,
 		Port: 6443,
 	}}
-	if err := lcc.client.Update(context.Background(), cluster); err != nil {
-		return err
-	}
-	return nil
+	return lcc.client.Status().Update(context.TODO(), cluster)
 }
 
-func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster) error {
+func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster, ip string) error {
 	glog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
 	// TODO: validate that API Server is running for the cluster
 
 	// Deploy API Server for the LKE cluster
 	values := map[string]interface{}{
-		"ClusterName": cluster.Name,
+		"ClusterName":      cluster.Name,
+		"AdvertiseAddress": ip,
 	}
 
 	if err := lcc.chartDeployer.DeployChart(apiserverChartPath, cluster.Name, values); err != nil {
@@ -234,6 +256,141 @@ func (lcc *LinodeClusterClient) reconcileKubeletResources(cluster *clusterv1.Clu
 
 	if err := chartDeployerLKE.DeployChart(kubeletResourcesPath, "kube-system", map[string]interface{}{}); err != nil {
 		glog.Errorf("Error reconciling kubelet resources for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	return nil
+}
+
+/*
+ * reconcileAddonsAndConfigmaps deploys kube-proxy and coredns addons, an
+ * initial bootstrap token, kubeadm config, and some additional resources
+ * This is done by executing the following commands:
+ *
+ *   export ka='kubeadm --kubeconfig <config>'
+ *   $ka init phase bootstrap-token
+ *   $ka init phase addon kube-proxy --apiserver-advertise-address <lb-IP-address> --pod-network-cidr 10.2.0.0/16
+ *   $ka init phase upload-config kubeadm
+ *   $ka init phase addon coredns --service-cidr 10.128.0.0/16
+ */
+func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(cluster *clusterv1.Cluster, ip string) error {
+	glog.Infof("Reconciling kubelet resources for cluster %v.", cluster.Name)
+
+	kubeconfig, err := tempKubeconfig(lcc.client, cluster.Name)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(kubeconfig)
+
+	if _, err := system("kubeadm --kubeconfig %s init phase bootstrap-token", kubeconfig); err != nil {
+		return err
+	}
+
+	if _, err := system("kubeadm --kubeconfig %s init phase addon kube-proxy --apiserver-advertise-address %s --pod-network-cidr 10.2.0.0/16", kubeconfig, ip); err != nil {
+		return err
+	}
+
+	if _, err := system("kubeadm --kubeconfig %s init phase upload-config kubeadm", kubeconfig); err != nil {
+		return err
+	}
+
+	if _, err := system("kubeadm --kubeconfig %s init phase addon coredns --service-cidr 10.128.0.0/16", kubeconfig); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (lcc *LinodeClusterClient) reconcileCNI(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling CNI for cluster %v.", cluster.Name)
+
+	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
+	if err != nil {
+		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	if err := chartDeployerLKE.DeployChart(cniResourcesPath, "kube-system", map[string]interface{}{}); err != nil {
+		glog.Errorf("Error reconciling CNI for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	return nil
+}
+
+func (lcc *LinodeClusterClient) reconcileCCM(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling CCM for cluster %v.", cluster.Name)
+
+	values := map[string]interface{}{}
+
+	if err := lcc.chartDeployer.DeployChart(ccmChartPath, cluster.Name, values); err != nil {
+		glog.Errorf("Error reconciling CCM for cluster %v: %v", cluster.Name, err)
+
+		return err
+	}
+
+	return nil
+}
+
+// creates a new client for LKE
+func lkeClientNew(cpcClient client.Client, cluster string) (client.Client, error) {
+	kubeconfig, err := tempKubeconfig(cpcClient, cluster)
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(kubeconfig)
+
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	return client.New(config, client.Options{})
+}
+
+// copies the 'kube-system-<cluster>/linode' secret in CPC to the
+// 'kube-system/linode' secret in LKE cluster <cluster>
+func copyLinodeSecret(cpcClient, lkeClient client.Client, namespace string) error {
+
+	secret := &corev1.Secret{}
+	if err := cpcClient.Get(context.Background(), types.NamespacedName{Namespace: namespace, Name: "linode"}, secret); err != nil {
+		return err
+	}
+
+	lkeSecret := &corev1.Secret{}
+	lkeSecret.ObjectMeta = metav1.ObjectMeta{
+		Namespace: "kube-system",
+		Name:      "linode",
+	}
+	lkeSecret.Type = corev1.SecretTypeOpaque
+	lkeSecret.Data = secret.Data // note: not a deep copy
+
+	return lkeClient.Create(context.Background(), lkeSecret)
+}
+
+func (lcc *LinodeClusterClient) reconcileCSI(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling CSI for cluster %v.", cluster.Name)
+
+	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
+	if err != nil {
+		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	lkeClient, err := lkeClientNew(lcc.client, cluster.Name)
+	if err != nil {
+		return err
+	}
+
+	// Copy linode secret from CPC to LKE
+	if err := copyLinodeSecret(lcc.client, lkeClient, clusterNamespace(cluster.Name)); err != nil {
+		glog.Errorf("Error creating a linode secret in the LKE %v: %v", cluster.Name, err)
+		return err
+	}
+
+	values := map[string]interface{}{}
+
+	if err := chartDeployerLKE.DeployChart(csiResourcePath, "kube-system", values); err != nil {
+		glog.Errorf("Error reconciling CSI for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 

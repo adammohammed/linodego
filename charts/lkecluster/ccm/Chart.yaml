@@ -1,0 +1,4 @@
+apiVersion: v1
+description: LKE cluster CCM Resources
+name: ccm
+version: 0.0.1
