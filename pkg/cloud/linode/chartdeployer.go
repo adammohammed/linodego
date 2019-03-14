@@ -7,7 +7,7 @@ import (
 
 	"github.com/gardener/gardener/pkg/chartrenderer"
 	"github.com/gardener/gardener/pkg/client/kubernetes"
-	"github.com/gardener/gardener/pkg/client/kubernetes/base"
+	kubernetesbase "github.com/gardener/gardener/pkg/client/kubernetes/base"
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
 
@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// A ChartDeployer can be used to deploy Helm charts to a target Kubernetes cluster
 type ChartDeployer struct {
 	client   kubernetes.Client
 	renderer chartrenderer.ChartRenderer
@@ -41,6 +42,9 @@ func newChartDeployer(config *rest.Config) (*ChartDeployer, error) {
 	}, nil
 }
 
+// DeployChart deploys a Helm chart to the configured cluster to the target namespace.
+// It does not use Tiller; everything is templated locally and applied to the cluster.
+// A map of template values can be provided.
 func (cd *ChartDeployer) DeployChart(chartPath, namespace string, values map[string]interface{}) error {
 	// use the chartPath as the releaseName, because we're in a cluster-specific namespace
 	renderedChart, err := cd.renderer.Render(chartPath, chartPath, namespace, values)
@@ -101,7 +105,7 @@ func tempKubeconfig(cpcClient client.Client, cluster string) (string, error) {
  * lkeClient returns an LKE client based on its arguments. The credentials for
  * the LKE cluster are taken from the CPC using cpcClient
  */
-func lkeClient(cpcClient client.Client, cluster string) (*kubernetesbase.Client, error) {
+func lkeChartClient(cpcClient client.Client, cluster string) (*kubernetesbase.Client, error) {
 	kubeconfig, err := tempKubeconfig(cpcClient, cluster)
 	if err != nil {
 		return nil, err
@@ -122,7 +126,7 @@ func lkeClient(cpcClient client.Client, cluster string) (*kubernetesbase.Client,
  * grab LKE credentials from CPC (kept as a secret).
  */
 func newChartDeployerLKE(cpcClient client.Client, cluster string) (*ChartDeployer, error) {
-	client, err := lkeClient(cpcClient, cluster)
+	client, err := lkeChartClient(cpcClient, cluster)
 	if err != nil {
 		return nil, err
 	}
