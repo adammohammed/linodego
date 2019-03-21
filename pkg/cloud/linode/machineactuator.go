@@ -20,6 +20,7 @@ package linode
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -39,6 +40,8 @@ import (
 	"sigs.k8s.io/cluster-api/pkg/kubeadm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	"bits.linode.com/aprotopopov/wg-controller/pkg/controller/lkeclient"
 )
 
 const (
@@ -58,6 +61,8 @@ type LinodeClient struct {
 	scheme        *runtime.Scheme
 	eventRecorder record.EventRecorder
 	kubeadm       *kubeadm.Kubeadm
+
+	clusterConfigClient *lkeclient.XxxConfigV1Alpha1Client
 }
 
 type MachineActuatorParams struct {
@@ -66,12 +71,31 @@ type MachineActuatorParams struct {
 }
 
 func NewMachineActuator(m manager.Manager, params MachineActuatorParams) (*LinodeClient, error) {
+	clusterConfigClient, err := newClusterConfigClient()
+	if err != nil {
+		return nil, err
+	}
+
 	return &LinodeClient{
-		client:        m.GetClient(),
-		scheme:        params.Scheme,
-		eventRecorder: params.EventRecorder,
-		kubeadm:       kubeadm.New(),
+		client:              m.GetClient(),
+		scheme:              params.Scheme,
+		eventRecorder:       params.EventRecorder,
+		kubeadm:             kubeadm.New(),
+		clusterConfigClient: clusterConfigClient,
 	}, nil
+}
+
+func newClusterConfigClient() (*lkeclient.XxxConfigV1Alpha1Client, error) {
+	/*
+	 * If we are running externally to cluster (in a docker container),
+	 * then the kubeconfig file is "/root/.kube/config". Otherwise we can
+	 * create a client from the in-cluster config
+	 */
+	if os.Getenv("RUNNING_EXTERNALLY") == "yes" {
+		return lkeclient.NewClientFromFlags("/root/.kube/config")
+	} else {
+		return lkeclient.NewInClusterClient()
+	}
 }
 
 func getLinodeAPIClient(client client.Client, cluster *clusterv1.Cluster) (*linodego.Client, error) {
@@ -153,8 +177,13 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 			return err
 		}
 
+		wgPubKey, err := lc.getWGwgPubKey(cluster.Name)
+		if err != nil {
+			return fmt.Errorf("Couldn't get WG public key for cluster %s: %v", cluster.Name, err)
+		}
+
 		glog.Infof("roles %v", machineConfig.Roles)
-		initScript, err := lc.getInitScript(token, cluster, machine, machineConfig)
+		initScript, err := lc.getInitScript(token, cluster, machine, machineConfig, wgPubKey)
 		if err != nil {
 			return err
 		}
