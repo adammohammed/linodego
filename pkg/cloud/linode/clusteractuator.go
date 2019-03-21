@@ -47,6 +47,9 @@ const (
 	ccmChartPath         = lkeclusterPath + "/" + "ccm"
 
 	csiResourcePath = lkeclusterPath + "/" + "csi/lke"
+
+	wgPath                 = lkeclusterPath + "/" + "wg"
+	wgLKECredsResourcePath = wgPath + "/" + "lke/clusterroles"
 )
 
 type LinodeClusterClient struct {
@@ -124,6 +127,10 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 	}
 
 	if err := lcc.reconcileCSI(cluster); err != nil {
+		return err
+	}
+
+	if err := lcc.reconcileWG(cluster); err != nil {
 		return err
 	}
 
@@ -361,9 +368,12 @@ func copyLinodeSecret(cpcClient, lkeClient client.Client, namespace string) erro
 		Namespace: "kube-system",
 		Name:      "linode",
 	}
+	if err := lkeClient.Get(context.Background(), types.NamespacedName{Namespace: "kube-system", Name: "linode"}, lkeSecret); err == nil {
+		return nil
+	}
+
 	lkeSecret.Type = corev1.SecretTypeOpaque
 	lkeSecret.Data = secret.Data // note: not a deep copy
-
 	return lkeClient.Create(context.Background(), lkeSecret)
 }
 
@@ -391,6 +401,25 @@ func (lcc *LinodeClusterClient) reconcileCSI(cluster *clusterv1.Cluster) error {
 
 	if err := chartDeployerLKE.DeployChart(csiResourcePath, "kube-system", values); err != nil {
 		glog.Errorf("Error reconciling CSI for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	return nil
+}
+
+func (lcc *LinodeClusterClient) reconcileWG(cluster *clusterv1.Cluster) error {
+	glog.Infof("Reconciling WG controller for cluster %v.", cluster.Name)
+
+	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
+	if err != nil {
+		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
+		return err
+	}
+
+	values := map[string]interface{}{}
+
+	if err := chartDeployerLKE.DeployChart(wgLKECredsResourcePath, "kube-system", values); err != nil {
+		glog.Errorf("Error reconciling WG credentials for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 

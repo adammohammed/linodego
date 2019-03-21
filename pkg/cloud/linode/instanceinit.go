@@ -69,7 +69,7 @@ func isMaster(roles []lkeconfigv1.MachineRole) bool {
  * to be used with RequeueAfterError.
  */
 
-func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, machine *clusterv1.Machine, config *lkeconfigv1.LkeMachineProviderConfig) (*initScript, error) {
+func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, machine *clusterv1.Machine, config *lkeconfigv1.LkeMachineProviderConfig, wgPubKey string) (*initScript, error) {
 	initScript := &initScript{}
 
 	stackscript, err := lc.getInitStackScript(cluster, config)
@@ -104,6 +104,7 @@ func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, 
 			"machinename":    machine.ObjectMeta.Name,
 			"service_domain": cluster.Spec.ClusterNetwork.ServiceDomain,
 			"endpoint":       endpoint(cluster.Status.APIEndpoints[0]),
+			"wgapipubkey":    wgPubKey,
 		}
 	}
 
@@ -320,6 +321,7 @@ const nodeInitScript = `#!/bin/bash
 # <UDF name="machinename" label="The name of the Machine object for this cluster member">
 # <UDF name="service_domain" label="The domain name to use for Kubernetes Services">
 # <UDF name="endpoint" label="The kube-apiserver endpoint to use">
+# <UDF name="wgapipubkey" label="WG Public Key Of the API server">
 
 MACHINE=$NAMESPACE
 MACHINE+="/"
@@ -374,6 +376,10 @@ KUBECTLVERSION=$(getversion kubectl ${K8SVERSION}-)
 apt-get install -qy kubeadm=${KUBEADMVERSION} kubelet=${KUBELETVERSION} kubectl=${KUBECTLVERSION}
 apt-mark hold kubeadm kubelet kubectl
 
+# install wireguard packages
+add-apt-repository -y ppa:wireguard/wireguard
+apt-get install -y wireguard
+
 # TODO: Disable password login
 
 # Let CCM to make its work
@@ -386,6 +392,42 @@ for tries in $(seq 1 60); do
 	kubectl --kubeconfig /etc/kubernetes/kubelet.conf annotate --overwrite node ${HOSTNAME} machine=${MACHINE} && break
 	sleep 1
 done 
+
+PRIVATEKEY=$(wg genkey)
+PUBLICKEY=$(echo "$PRIVATEKEY" | wg pubkey)
+
+# assumes that we have the following POD network format: "10.2.N.0/24"
+gimme_n() {
+	kubectl --kubeconfig /etc/kubernetes/kubelet.conf get node $HOSTNAME -o template --template='{{.spec.podCIDR}}' |
+	awk -F. '($1==10 && $2==2 && $4=="0/24") {print $3}'
+}
+
+N=$(gimme_n)
+
+mkdir -p /etc/wireguard
+cat >/etc/wireguard/wg0.conf <<END
+[Interface]
+PrivateKey = $PRIVATEKEY
+Address = 172.31.$N.1
+SaveConfig = true
+ListenPort = 51820
+[Peer]
+PublicKey = $WGAPIPUBKEY
+AllowedIPs = 172.31.255.1
+END
+
+wg-quick up wg0
+systemctl enable wg-quick@wg0
+wg show
+
+# trying to do it for several times, but not so many, as we already sucesfully connected to the server
+PFX=lke.linode.com
+for tries in $(seq 1 10); do
+	kubectl --kubeconfig /etc/kubernetes/kubelet.conf annotate --overwrite node $HOSTNAME $PFX/wgpub="${PUBLICKEY}" $PFX/wgip="172.31.$N.1" &&
+		break ||
+		echo "Failed to annotate node, atempt #$tries"
+	sleep 1
+done
 
 echo done
 ) 2>&1 | tee /var/log/startup.log

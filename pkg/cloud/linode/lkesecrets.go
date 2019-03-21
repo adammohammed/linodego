@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 	"text/template"
 
 	"github.com/golang/glog"
@@ -79,7 +80,7 @@ func run(prog string, args ...string) (string, error) {
 		glog.Infof("stderr:\n%v", errStr)
 	}
 
-	return outStr, err
+	return strings.TrimSpace(outStr), err
 }
 
 type kubeadmConfigParams struct {

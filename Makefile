@@ -23,11 +23,12 @@ run: generate fmt vet
 # Do not push and run this image from Kubernetes by image name, it will run out of threads while compiling :-)
 run-docker: generate fmt vet
 	@mkdir -p ${ROOT_DIR}/run
-	kubectl apply -f ./provider-components.yaml
 	docker build -t "cluster-api-provider-lke:devel-run" -f Dockerfile.devel .
 	echo "Running the controller.. ctrl-c to stop, ctrl-z to detach (then use docker ps, docker attach, docker kill)"
+	go mod vendor
 	docker run -e KUBECONFIG=/root/.kube/config \
 		--detach-keys "ctrl-z" \
+		-e RUNNING_EXTERNALLY=yes \
 		-v $${KUBECONFIG}:/root/.kube/config \
 		-v ${ROOT_DIR}/run:/tmp/ \
 		"-ti" \
