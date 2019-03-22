@@ -1,8 +1,8 @@
 module bits.linode.com/asauber/cluster-api-provider-lke
 
 require (
-	bits.linode.com/aprotopopov/wg-controller v0.0.0-20190128165615-cef2ac8e0cfce448445457f0465b4821e4a11209
-	bits.linode.com/aprotopopov/wg-node-controller v0.0.0-20190115203717-22e8fc3a7005ef44e23771c22a0b1784a4863818
+	bits.linode.com/aprotopopov/wg-controller v0.0.0-20190128165615-2714efc3a37f6531df46138d8ea8bd89a1e8ee5f
+	bits.linode.com/aprotopopov/wg-node-controller v0.0.0-20190115203717-490a7910e7d48b10bd508f65766a0eec8e425f9e
 	cloud.google.com/go v0.29.0 // indirect
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/Masterminds/semver v1.4.2 // indirect
@@ -48,7 +48,7 @@ require (
 	golang.org/x/net v0.0.0-20190311183353-d8887717615a
 	golang.org/x/oauth2 v0.0.0-20181003184128-c57b0facaced
 	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2 // indirect
-	golang.org/x/tools v0.0.0-20190319232107-3f1ed9edd1b4 // indirect
+	golang.org/x/tools v0.0.0-20190322143616-6aabc1ca790d // indirect
 	google.golang.org/appengine v1.4.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/resty.v1 v1.11.0 // indirect
