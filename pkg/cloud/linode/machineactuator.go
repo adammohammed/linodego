@@ -41,7 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"bits.linode.com/aprotopopov/wg-controller/pkg/controller/lkeclient"
+	lkeclient "bits.linode.com/aprotopopov/wg-controller/pkg/client"
 )
 
 const (
@@ -62,7 +62,7 @@ type LinodeClient struct {
 	eventRecorder record.EventRecorder
 	kubeadm       *kubeadm.Kubeadm
 
-	clusterConfigClient *lkeclient.XxxConfigV1Alpha1Client
+	clusterConfigClient *lkeclient.ConfigV1Alpha1Client
 }
 
 type MachineActuatorParams struct {
@@ -85,7 +85,7 @@ func NewMachineActuator(m manager.Manager, params MachineActuatorParams) (*Linod
 	}, nil
 }
 
-func newClusterConfigClient() (*lkeclient.XxxConfigV1Alpha1Client, error) {
+func newClusterConfigClient() (*lkeclient.ConfigV1Alpha1Client, error) {
 	/*
 	 * If we are running externally to cluster (in a docker container),
 	 * then the kubeconfig file is "/root/.kube/config". Otherwise we can
