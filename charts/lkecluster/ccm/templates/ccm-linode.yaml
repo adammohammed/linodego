@@ -29,7 +29,7 @@ spec:
         - key: node.kubernetes.io/unreachable
           operator: Exists
           effect: NoSchedule
-      hostNetwork: true
+      hostNetwork: false
       containers:
         - image: linode/linode-cloud-controller-manager:canary
           imagePullPolicy: Always
