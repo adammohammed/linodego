@@ -94,11 +94,11 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 		return err
 	}
 
-	if err := lcc.reconcileAPIServer(cluster, ip); err != nil {
+	if err := lcc.reconcileEtcd(cluster); err != nil {
 		return err
 	}
 
-	if err := lcc.reconcileEtcd(cluster); err != nil {
+	if err := lcc.reconcileAPIServer(cluster, ip); err != nil {
 		return err
 	}
 

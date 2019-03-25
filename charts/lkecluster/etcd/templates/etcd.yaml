@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: etcd-bootstrap
-  namespace: {{ .Release.Namespace }}
+  namespace: kube-system-{{ .Release.Namespace }}
   labels:
     app: etcd
 data:
@@ -45,9 +45,10 @@ data:
               --quota-backend-bytes=8589934592 \
               --enable-v2=false \
               --initial-cluster-token=new \
-              --initial-cluster-state=new \
-              --auto-compaction-mode=periodic \
-              --auto-compaction-retention=24
+              --initial-cluster-state=new
+              # TODO: Restore these flags which were not present in etcd 3.2
+              # --auto-compaction-mode=periodic \
+              # --auto-compaction-retention=24
             ;;
       esac;
     done
@@ -104,18 +105,18 @@ spec:
         resources: {}
       # etcdbrctl, a sidecar which backs-up and restores etcd
       - name: etcd-backup-restore-control
-        image: eu.gcr.io/gardener-project/gardener/etcdbrctl:0.4.1
+        image: asauber/etcdbrctl:0.4.1mod
         command:
         - etcdbrctl
         - server
         # TODO: Tune the etcd backup schedule
-        - --schedule="* * * * *"
+        - --schedule=* * * * *
         # TODO; Tune the delta backup schedule
         - --delta-snapshot-period-seconds=10
         - --data-dir=/var/etcd/data/new.etcd
         - --storage-provider=S3
         # This is the S3 bucket name
-        - --store-prefix=lke-etcd-backups
+        - --store-prefix=lke-etcd-backups/{{ .Release.Namespace }}
         - --cert=/etc/kubernetes/pki/client/etcd/apiserver-etcd-client.crt
         - --key=/etc/kubernetes/pki/client/etcd/apiserver-etcd-client.key
         - --cacert=/etc/kubernetes/pki/etcd/ca.crt
@@ -140,9 +141,15 @@ spec:
         - name: OBJECT_STORAGE_ENDPOINT
           value: sellabrite.com
         - name: AWS_ACCESS_KEY_ID
-          value: $ALOHA
+          valueFrom:
+            secretKeyRef:
+              name: object-storage
+              key: access
         - name: AWS_SECRET_ACCESS_KEY
-          value: $ALOHA
+          valueFrom:
+            secretKeyRef:
+              name: object-storage
+              key: secret
         - name: AWS_REGION
           value: us-east
         volumeMounts:
