@@ -44,6 +44,20 @@ func generateWGKeys() (string, string, error) {
 	return wgpub, wgpriv, nil
 }
 
+func (lc *LinodeClient) savePrivateKey(key, namespace string) (string, error) {
+	name := "wgpriv"
+
+	data := map[string][]byte{
+		"key": []byte(key),
+	}
+
+	err := createOpaqueSecret(lc.client, namespace, name, data)
+	if err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
 func (lc *LinodeClient) getWGwgPubKey(cluster string) (string, error) {
 	namespace := clusterNamespace(cluster)
 
@@ -54,7 +68,12 @@ func (lc *LinodeClient) getWGwgPubKey(cluster string) (string, error) {
 			return "", fmt.Errorf("Failed to generate WG keys: %v", err)
 		}
 
-		config, err = helpers.CreateAPIConfig(lc.clusterConfigClient, namespace, wgpub, wgpriv)
+		wgprivname, err := lc.savePrivateKey(wgpriv, namespace)
+		if err != nil {
+			return "", fmt.Errorf("Failed to save WG private key in a secret: %v", err)
+		}
+
+		config, err = helpers.CreateAPIConfig(lc.clusterConfigClient, namespace, wgpub, wgprivname)
 		if err != nil {
 			return "", fmt.Errorf("Couldn't init initial WG config: %v", err)
 		}
