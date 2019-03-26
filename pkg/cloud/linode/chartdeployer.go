@@ -53,8 +53,7 @@ func (cd *ChartDeployer) DeployChart(chartPath, namespace string, values map[str
 	}
 	glog.Infof("We are deploying the following manifests")
 	glog.Infof("%v", renderedChart.Files)
-	cd.client.Apply(renderedChart.Manifest())
-	return nil
+	return cd.client.Apply(renderedChart.Manifest())
 }
 
 /*
