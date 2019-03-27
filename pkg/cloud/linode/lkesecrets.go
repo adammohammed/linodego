@@ -167,6 +167,12 @@ func createKubeadmFile(client client.Client, dirname string, cluster *clusterv1.
 	return filename, nil
 }
 
+func patchKubeconfig(path, address, port string) error {
+	expr := fmt.Sprintf(`s,\(server: https://\)\(.*\)$,\1%s:%s,`, address, port)
+	_, err := run("sed", "-e", expr, "-i", path)
+	return err
+}
+
 func generateCertsInit(client client.Client, cluster *clusterv1.Cluster) (*certsInit, error) {
 	dirname := "/tmp/" + cluster.Name + "/pki"
 	if err := os.MkdirAll(dirname, os.ModePerm); err != nil {
@@ -183,11 +189,23 @@ func generateCertsInit(client client.Client, cluster *clusterv1.Cluster) (*certs
 	// Don't walk up the directory tree to place the kubeconfigs, keep
 	// things rooted at the specified directory
 	kubeconfigDir := dirname + "/kubeconfigs"
+
 	// Generate client kubeconfigs with the `kubeadm init phase kubeconfig` command
 	if _, err := run("kubeadm", "init", "phase", "kubeconfig", "all",
 		"--kubeconfig-dir", kubeconfigDir,
 		"--cert-dir", dirname,
 		"--apiserver-advertise-address", cluster.Status.APIEndpoints[0].Host); err != nil {
+		return nil, err
+	}
+
+	// set proper domain names in kubeconfigs
+
+	apiServer := fmt.Sprintf("kube-apiserver.%s.svc.cluster.local", clusterNamespace(cluster.Name))
+
+	if err := patchKubeconfig(kubeconfigDir+"/"+"controller-manager.conf", apiServer, "6443"); err != nil {
+		return nil, err
+	}
+	if err := patchKubeconfig(kubeconfigDir+"/"+"scheduler.conf", apiServer, "6443"); err != nil {
 		return nil, err
 	}
 
