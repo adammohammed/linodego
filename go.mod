@@ -1,10 +1,9 @@
-module bits.linode.com/asauber/cluster-api-provider-lke
+module bits.linode.com/LinodeAPI/cluster-api-provider-lke
 
 require (
-	bits.linode.com/aprotopopov/wg-controller v0.0.0-20190128165615-fcdb709f6ac5378e67ffba58cffd42987f05caa6
-	bits.linode.com/aprotopopov/wg-node-controller v0.0.0-20190115203717-6038b272473296e650a0f6f5d96ab2f041570092
+	bits.linode.com/LinodeAPI/wg-controller v0.0.0-20190612172757-4e4c41c20655
+	bits.linode.com/LinodeAPI/wg-node-controller v0.0.0-20190612173038-0026e88e77ea
 	cloud.google.com/go v0.29.0 // indirect
-	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/Masterminds/semver v1.4.2 // indirect
 	github.com/Masterminds/sprig v2.17.1+incompatible // indirect
 	github.com/aokoli/goutils v1.1.0 // indirect
@@ -31,6 +30,7 @@ require (
 	github.com/imdario/mergo v0.3.6 // indirect
 	github.com/json-iterator/go v1.1.5 // indirect
 	github.com/linode/linodego v0.7.0
+	github.com/markbates/inflect v1.0.4 // indirect
 	github.com/mattbaird/jsonpatch v0.0.0-20171005235357-81af80346b1a // indirect
 	github.com/miekg/dns v1.1.3 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -41,14 +41,14 @@ require (
 	github.com/pkg/errors v0.8.0 // indirect
 	github.com/prometheus/client_golang v0.9.2 // indirect
 	github.com/sirupsen/logrus v1.3.0 // indirect
-	github.com/spf13/pflag v1.0.3 // indirect
+	github.com/spf13/afero v1.2.2 // indirect
+	github.com/spf13/cobra v0.0.5 // indirect
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.9.1 // indirect
 	golang.org/x/net v0.0.0-20190311183353-d8887717615a
 	golang.org/x/oauth2 v0.0.0-20181003184128-c57b0facaced
 	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2 // indirect
-	golang.org/x/tools v0.0.0-20190325161752-5a8dccf5b48a // indirect
 	google.golang.org/appengine v1.4.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/resty.v1 v1.11.0 // indirect
@@ -56,14 +56,13 @@ require (
 	k8s.io/apiextensions-apiserver v0.0.0-20180808065829-ba848ee89ca33b3 // indirect
 	k8s.io/apimachinery v0.0.0-20181127105237-6dd46049f
 	k8s.io/client-go v9.0.0+incompatible
-	k8s.io/code-generator v0.0.0-20190311155051-e4c2b1329cf7 // indirect
-	k8s.io/gengo v0.0.0-20190319205223-bc9033e9ec9e // indirect
+	k8s.io/code-generator v0.0.0-20190612125529-c522cb6c26aa // indirect
 	k8s.io/helm v2.12.3+incompatible // indirect
-	k8s.io/klog v0.1.0 // indirect
 	k8s.io/kube-aggregator v0.0.0-20190119022701-4764f3a1991175f47 // indirect
 	k8s.io/kube-openapi v0.0.0-20190115222348-ced9eb3070a5 // indirect
 	sigs.k8s.io/cluster-api v0.0.0-20181211193542-3547f8dd9307
 	sigs.k8s.io/controller-runtime v0.1.9
+	sigs.k8s.io/controller-tools v0.1.10 // indirect
 	sigs.k8s.io/testing_frameworks v0.1.1 // indirect
 	sigs.k8s.io/yaml v1.1.0 // indirect
 )

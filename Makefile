@@ -1,4 +1,3 @@
-
 # Image URL to use all building/pushing image targets
 IMG ?= linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:latest
 ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
@@ -13,7 +12,7 @@ test: generate fmt vet manifests
 
 # Build manager binary
 manager: generate fmt vet
-	go build -o bin/manager bits.linode.com/asauber/cluster-api-provider-lke/cmd/manager
+	go build -o bin/manager bits.linode.com/LinodeAPI/cluster-api-provider-lke/cmd/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet

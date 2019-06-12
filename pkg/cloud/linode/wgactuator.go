@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"os"
 
-	"bits.linode.com/aprotopopov/wg-node-controller/helpers"
+	"bits.linode.com/LinodeAPI/wg-node-controller/helpers"
 )
 
 func generateWGKeys() (string, string, error) {

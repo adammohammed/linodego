@@ -20,7 +20,7 @@ package linode
 import (
 	"fmt"
 
-	lkeconfigv1 "bits.linode.com/asauber/cluster-api-provider-lke/pkg/apis/lkeproviderconfig/v1alpha1"
+	lkeconfigv1 "bits.linode.com/LinodeAPI/cluster-api-provider-lke/pkg/apis/lkeproviderconfig/v1alpha1"
 	"github.com/linode/linodego"
 	"golang.org/x/net/context"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"

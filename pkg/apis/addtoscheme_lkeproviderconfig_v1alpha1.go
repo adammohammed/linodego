@@ -18,7 +18,7 @@ limitations under the License.
 package apis
 
 import (
-	"bits.linode.com/asauber/cluster-api-provider-lke/pkg/apis/lkeproviderconfig/v1alpha1"
+	"bits.linode.com/LinodeAPI/cluster-api-provider-lke/pkg/apis/lkeproviderconfig/v1alpha1"
 )
 
 func init() {

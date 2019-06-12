@@ -18,7 +18,7 @@ limitations under the License.
 // Package v1alpha1 contains API Schema definitions for the lkeproviderconfig v1alpha1 API group
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen=package,register
-// +k8s:conversion-gen=bits.linode.com/asauber/cluster-api-provider-lke/pkg/apis/lkeproviderconfig
+// +k8s:conversion-gen=bits.linode.com/LinodeAPI/cluster-api-provider-lke/pkg/apis/lkeproviderconfig
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=lkeproviderconfig.linode.com
 package v1alpha1
