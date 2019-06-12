@@ -4,7 +4,7 @@ This repository hosts an implementation of a provider for the Linode
 Kubernetes Engine for the [cluster-api
 project](https://github.com/kubernetes-sigs/cluster-api).
 
-It is a fork of our [publicly accessible cluster-api provider implementation](https://github.com/asauber/cluster-api-provider-linode). All changes deemed
+It is a fork of our [publicly accessible cluster-api provider implementation](https://github.com/LinodeAPI/cluster-api-provider-linode). All changes deemed
 relevant for public consumption should be upstreamed to that repository.
 
 ## Project Status
@@ -34,7 +34,7 @@ cat >> ~/.gitconfig <<EOF
 [url "git@bits.linode.com:"]
     insteadOf = https://bits.linode.com/
 EOF
-go get bits.linode.com/asauber/cluster-api-provider-lke
+go get bits.linode.com/LinodeAPI/cluster-api-provider-lke
 ```
 
 * [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
@@ -174,7 +174,7 @@ hack/delete_cluster.sh cluster01
 
 When using a kustomize-rendered `provider-components.yaml`, the
 cluster-api-provider-linode controllers are deployed from a container
-registry (currently `asauber/cluster-api-provider-linode` on Docker Hub). To
+registry (currently `LinodeAPI/cluster-api-provider-linode` on Docker Hub). To
 work on development, you can use a make target which compiles and runs the
 controllers on your local machine.
 

@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"strings"
 
-	lkeconfigv1 "bits.linode.com/asauber/cluster-api-provider-lke/pkg/apis/lkeproviderconfig/v1alpha1"
+	lkeconfigv1 "bits.linode.com/LinodeAPI/cluster-api-provider-lke/pkg/apis/lkeproviderconfig/v1alpha1"
 	"github.com/ghodss/yaml"
 	"github.com/golang/glog"
 	"github.com/linode/linodego"
@@ -41,7 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	lkeclient "bits.linode.com/aprotopopov/wg-controller/pkg/client"
+	lkeclient "bits.linode.com/LinodeAPI/wg-controller/pkg/client"
 )
 
 const (

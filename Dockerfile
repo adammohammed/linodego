@@ -2,7 +2,7 @@
 FROM golang:1.11.5 as builder
 
 # Copy in the go src
-WORKDIR /go/src/bits.linode.com/asauber/cluster-api-provider-lke
+WORKDIR /go/src/bits.linode.com/LinodeAPI/cluster-api-provider-lke
 COPY ./go.mod  .
 COPY ./go.sum  .
 COPY cmd/    cmd/
@@ -11,7 +11,7 @@ COPY charts/ charts/
 COPY vendor/ vendor/
 
 # Build
-RUN GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager bits.linode.com/asauber/cluster-api-provider-lke/cmd/manager
+RUN GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager bits.linode.com/LinodeAPI/cluster-api-provider-lke/cmd/manager
 
 # kubeadm (for pre-generating cluster tokens)
 FROM ubuntu:latest as kubeadm
@@ -26,5 +26,5 @@ RUN apt-get install add-apt-repository && add-apt-repository -y ppa:wireguard/wi
 # Copy the controller-manager into a thin image
 FROM ubuntu:latest
 WORKDIR /root/
-COPY --from=builder /go/src/bits.linode.com/asauber/cluster-api-provider-lke/manager .
+COPY --from=builder /go/src/bits.linode.com/LinodeAPI/cluster-api-provider-lke/manager .
 ENTRYPOINT ["./manager"]

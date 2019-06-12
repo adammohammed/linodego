@@ -18,7 +18,7 @@ limitations under the License.
 package controller
 
 import (
-	"bits.linode.com/asauber/cluster-api-provider-lke/pkg/cloud/linode"
+	"bits.linode.com/LinodeAPI/cluster-api-provider-lke/pkg/cloud/linode"
 	"sigs.k8s.io/cluster-api/pkg/controller/machine"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
