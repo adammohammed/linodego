@@ -305,8 +305,24 @@ func (lc *LinodeClient) Delete(ctx context.Context, cluster *clusterv1.Cluster, 
 
 	err = linodeClient.DeleteInstance(context.Background(), linodeID)
 	if err != nil {
-		return fmt.Errorf("Error deleting Linode %d", linodeID)
+
+		original_err, ok := err.(*linodego.Error)
+
+		/*
+		 * If a linode with the linodeIDStr ID dosn't exist, then we
+		 * assume that a user deleted the linode voluntary and thus we
+		 * still need to delete the machine. Otherwise, we can get into
+		 * an infinite loop and won't be able to delete a machine.
+		 */
+		if ok && original_err.Code == 404 {
+			glog.Infof("Linode with ID %s doesn't exist; Deleting machine anyway", linodeIDStr)
+			return nil
+		}
+
+		return fmt.Errorf("Error deleting Linode %d: %s", linodeID, err.Error())
 	}
+
+	glog.Infof("Deleted Linode with ID %s", linodeIDStr)
 	return nil
 }
 
