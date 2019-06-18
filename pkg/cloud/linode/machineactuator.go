@@ -98,7 +98,7 @@ func newClusterConfigClient() (*lkeclient.ConfigV1Alpha1Client, error) {
 	}
 }
 
-func getLinodeAPIClient(client client.Client, cluster *clusterv1.Cluster) (*linodego.Client, error) {
+func getLinodeAPIClient(client client.Client, cluster *clusterv1.Cluster) (*linodego.Client, string, error) {
 	/*
 	 * We construct a new client every time that we make a Linode API call so that
 	 * the API Token Secret can be rotated at any time. We need a Cluster object
@@ -111,12 +111,17 @@ func getLinodeAPIClient(client client.Client, cluster *clusterv1.Cluster) (*lino
 		apiTokenSecret)
 
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving Linode API token secret for cluster %v", err)
+		return nil, "", fmt.Errorf("error retrieving Linode API token secret for cluster %v", err)
 	}
 
 	apiKey, ok := apiTokenSecret.Data["token"]
 	if !ok {
-		return nil, fmt.Errorf("Linode API token secret for namespace %s is missing 'token' data", namespace)
+		return nil, "", fmt.Errorf("Linode API token secret for namespace %s is missing 'token' data", namespace)
+	}
+
+	region, ok := apiTokenSecret.Data["region"]
+	if !ok {
+		return nil, "", fmt.Errorf("Linode API token secret for namespace %s is missing 'region' data", namespace)
 	}
 
 	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey)})
@@ -128,7 +133,7 @@ func getLinodeAPIClient(client client.Client, cluster *clusterv1.Cluster) (*lino
 	linodeClient := linodego.NewClient(oauth2Client)
 	linodeClient.SetUserAgent(fmt.Sprintf("cluster-api-provider-lke %s", linodego.DefaultUserAgent))
 	// linodeClient.SetDebug(true)
-	return &linodeClient, nil
+	return &linodeClient, strings.TrimSpace(string(region)), nil
 }
 
 func (lc *LinodeClient) validateMachine(machine *clusterv1.Machine, config *lkeconfigv1.LkeMachineProviderConfig) *apierrors.MachineError {
@@ -188,7 +193,7 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 			return err
 		}
 
-		linodeClient, err := getLinodeAPIClient(lc.client, cluster)
+		linodeClient, CPCRegion, err := getLinodeAPIClient(lc.client, cluster)
 		if err != nil {
 			return fmt.Errorf("Error initializing Linode API client: %v", err)
 		}
@@ -204,7 +209,7 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 		}
 
 		instance, err := linodeClient.CreateInstance(context.Background(), linodego.InstanceCreateOptions{
-			Region:          machineConfig.Region,
+			Region:          CPCRegion,
 			Type:            machineConfig.Type,
 			Label:           lc.MachineLabel(cluster, machine),
 			Image:           machineConfig.Image,
@@ -298,7 +303,7 @@ func (lc *LinodeClient) Delete(ctx context.Context, cluster *clusterv1.Cluster, 
 		return fmt.Errorf("Error converting Linode ID annotation to integer")
 	}
 
-	linodeClient, err := getLinodeAPIClient(lc.client, cluster)
+	linodeClient, _, err := getLinodeAPIClient(lc.client, cluster)
 	if err != nil {
 		return fmt.Errorf("Error initializing Linode API client: %v", err)
 	}
@@ -361,7 +366,7 @@ func (lc *LinodeClient) instanceIfExists(cluster *clusterv1.Cluster, machine *cl
 
 	// Get the VM via Linode label: <cluster-name>-<machine-name>
 	label := lc.MachineLabel(cluster, identifyingMachine)
-	linodeClient, err := getLinodeAPIClient(lc.client, cluster)
+	linodeClient, _, err := getLinodeAPIClient(lc.client, cluster)
 	if err != nil {
 		return nil, fmt.Errorf("Error initializing Linode API client: %v", err)
 	}

@@ -112,7 +112,7 @@ func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, 
 }
 
 func (lc *LinodeClient) getInitStackScript(cluster *clusterv1.Cluster, config *lkeconfigv1.LkeMachineProviderConfig) (*linodego.Stackscript, error) {
-	linodeClient, err := getLinodeAPIClient(lc.client, cluster)
+	linodeClient, _, err := getLinodeAPIClient(lc.client, cluster)
 	if err != nil {
 		return nil, fmt.Errorf("Error initializing Linode API client: %v", err)
 	}
