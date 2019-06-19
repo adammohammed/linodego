@@ -23,16 +23,9 @@ generate:
 vet: generate
 	go vet ./pkg/... ./cmd/...
 
-# Run goreturns against all files.
-# goreturns formats files in-place to fix missing return values
-#
-# goreturns runs goimports
-# goimports fixes missing and mis-formatted import lines
-#
-# goimport runs gofmt
-# gofmt formats files in a consistent style.
+# Run go fmt against all files.
 fmt: vet
-	goreturns -w ./pkg ./cmd
+	go fmt ./pkg/... ./cmd/...
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: fmt
