@@ -1,26 +1,52 @@
 # Image URL to use all building/pushing image targets
-IMG ?= linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:latest
+IMG ?= linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:canary
 ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-
 export GO111MODULE=on
+
+# define phony targets which do not actually map to filenames
+.PHONY: all generate vet fmt test manager run run-docker installcrds deploy manifests docker-build docker-push
+
 
 all: test manager
 
+# resolve and update dependencies
+deps:
+	go mod tidy
+
+# Generate code using go code generation.
+# Used to generate DeepCopy functions for Kubernetes Resource defintions
+generate:
+	go generate ./pkg/... ./cmd/...
+
+# Run go vet against all files.
+# Go vet is a linter. Please fix all issues that it finds.
+vet: generate
+	go vet ./pkg/... ./cmd/...
+
+# Run go fmt against all files.
+fmt: vet
+	go fmt ./pkg/... ./cmd/...
+
+# Generate manifests e.g. CRD, RBAC etc.
+manifests: fmt
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen crd --output-dir config/default/crds
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen rbac --output-dir config/default/rbac
+
 # Run tests
-test: generate fmt vet manifests
+test: fmt manifests
 	go test -v ./pkg/... ./cmd/... -coverprofile cover.out
 
 # Build manager binary
-manager: generate fmt vet
+manager: fmt
 	go build -o bin/manager bits.linode.com/LinodeAPI/cluster-api-provider-lke/cmd/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet
+run: fmt
 	go run ./cmd/manager/main.go -logtostderr=true -stderrthreshold=INFO
 
 # Run in Linux container against the configured Kubernetes cluster in the file at $KUBECONFIG
 # Do not push and run this image from Kubernetes by image name, it will run out of threads while compiling :-)
-run-docker: generate fmt vet
+run-docker: fmt
 	@mkdir -p ${ROOT_DIR}/run
 	docker build -t "cluster-api-provider-lke:devel-run" -f Dockerfile.devel .
 	echo "Running the controller.. ctrl-c to stop, ctrl-z to detach (then use docker ps, docker attach, docker kill)"
@@ -34,29 +60,12 @@ run-docker: generate fmt vet
 		"cluster-api-provider-lke:devel-run" -logtostderr=true -stderrthreshold=INFO
 
 # Install CRDs into a cluster
-install: manifests
-	kubectl apply -f config/crds
+installcrds: manifests
+	kubectl apply -f config/default/crds
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
 	kustomize build config/default | kubectl apply -f -
-
-# Generate manifests e.g. CRD, RBAC etc.
-manifests:
-	go run sigs.k8s.io/controller-tools/cmd/controller-gen crd --output-dir config/default/crds
-	go run sigs.k8s.io/controller-tools/cmd/controller-gen rbac --output-dir config/default/rbac
-
-# Run go fmt against code
-fmt:
-	go fmt ./pkg/... ./cmd/...
-
-# Run go vet against code
-vet:
-	go vet ./pkg/... ./cmd/...
-
-# Generate code
-generate:
-	go generate ./pkg/... ./cmd/...
 
 # Build the docker image
 docker-build: test
@@ -67,3 +76,4 @@ docker-build: test
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+

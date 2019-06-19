@@ -22,10 +22,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 
 	"github.com/golang/glog"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // run_prog executes a local process prog and returns the standard output of that
