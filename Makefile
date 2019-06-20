@@ -1,15 +1,16 @@
 # Image URL to use all building/pushing image targets
-IMG ?= linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:canary
+IMG ?= linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:canaryrc1
 ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 export GO111MODULE=on
 
 # define phony targets which do not actually map to filenames
 .PHONY: all generate vet fmt test manager run run-docker installcrds deploy manifests docker-build docker-push
 
-
+.PHONY: all
 all: test manager
 
 # resolve and update dependencies
+.PHONY: deps
 deps:
 	go mod tidy
 
@@ -36,9 +37,13 @@ manifests: fmt
 test: fmt manifests
 	go test -v ./pkg/... ./cmd/... -coverprofile cover.out
 
-# Build manager binary
-manager: fmt
-	go build -o bin/manager bits.linode.com/LinodeAPI/cluster-api-provider-lke/cmd/manager
+# Build binary
+manager: test
+	GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o ./run/manager ./cmd/manager
+
+# Build binary
+build: manager
+	echo "Building cluster-api-provider-lke controller manager binary"
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: fmt
@@ -68,7 +73,7 @@ deploy: manifests
 	kustomize build config/default | kubectl apply -f -
 
 # Build the docker image
-docker-build: test
+docker-build: build
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
 	sed -i.bak -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
