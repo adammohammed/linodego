@@ -12,17 +12,30 @@ bin/
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-examples/cluster.yaml
+# allow users to edit the examples
+examples/cluster*
+examples/node*
 
+# kubeconfigs
 *.conf
 
+# disk images
 *.img
 
+# swap files
 *.sw*
 
+# manifests directory
 manifests
 
+# binaries
 run
 
-# ignore
+# packages
 vendor/
+
+# macos
+.DS_Store
+
+# bak files
+*.bak
