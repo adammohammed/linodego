@@ -5,6 +5,7 @@
 *.so
 *.dylib
 bin/
+*.bak*
 
 # Test binary, build with `go test -c`
 *.test
@@ -12,17 +13,29 @@ bin/
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-examples/cluster.yaml
+# allow users to edit the examples
+examples/*.yaml*
 
+# kubeconfigs
 *.conf
 
+# disk images
 *.img
 
+# swap files
 *.sw*
 
+# manifests directory
 manifests
 
+# binaries
 run
 
-# ignore
+# packages
 vendor/
+
+# macos
+.DS_Store
+
+# bak files
+*.bak
