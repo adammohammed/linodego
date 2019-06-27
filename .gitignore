@@ -5,6 +5,7 @@
 *.so
 *.dylib
 bin/
+*.bak*
 
 # Test binary, build with `go test -c`
 *.test
@@ -13,8 +14,7 @@ bin/
 *.out
 
 # allow users to edit the examples
-examples/cluster*
-examples/node*
+examples/*.yaml*
 
 # kubeconfigs
 *.conf
