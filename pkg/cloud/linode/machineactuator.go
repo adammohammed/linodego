@@ -19,7 +19,6 @@ package linode
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -29,7 +28,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/linode/linodego"
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -124,15 +122,12 @@ func getLinodeAPIClient(client client.Client, cluster *clusterv1.Cluster) (*lino
 		return nil, "", fmt.Errorf("Linode API token secret for namespace %s is missing 'region' data", namespace)
 	}
 
-	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey)})
-	oauth2Client := &http.Client{
-		Transport: &oauth2.Transport{
-			Source: tokenSource,
-		},
-	}
-	linodeClient := linodego.NewClient(oauth2Client)
+	linodeClient := linodego.NewClient(nil)
 	linodeClient.SetUserAgent(fmt.Sprintf("cluster-api-provider-lke %s", linodego.DefaultUserAgent))
-	// linodeClient.SetDebug(true)
+	linodeClient.SetToken(string(apiKey))
+	if len(os.Getenv("LINODEGO_DEBUG")) > 0 {
+		linodeClient.SetDebug(true)
+	}
 	return &linodeClient, strings.TrimSpace(string(region)), nil
 }
 
