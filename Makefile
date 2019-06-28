@@ -1,6 +1,7 @@
 # Image URL to use all building/pushing image targets
 IMG ?= linode-docker.artifactory.linode.com/lke/cluster-api-provider-lke:canaryrc1
 ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+REVISION = $(shell sh revision.sh)
 export GO111MODULE=on
 
 .PHONY: all
@@ -42,7 +43,7 @@ test: fmt manifests
 # Build binary
 .PHONY: manager
 manager: test
-	GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o ./run/manager ./cmd/manager
+	GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.caplkeVersion=$(REVISION)" -a -o ./run/manager ./cmd/manager
 
 # Build binary
 .PHONY: build
@@ -52,7 +53,7 @@ build: manager
 # Run against the configured Kubernetes cluster in ~/.kube/config
 .PHONY: run
 run: fmt
-	go run ./cmd/manager/main.go -logtostderr=true -stderrthreshold=INFO
+	go run -ldflags "-X main.caplkeVersion=$(REVISION)" ./cmd/manager/main.go -logtostderr=true -stderrthreshold=INFO
 
 # Run in Linux container against the configured Kubernetes cluster in the file at $KUBECONFIG
 # Do not push and run this image from Kubernetes by image name, it will run out of threads while compiling :-)

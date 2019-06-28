@@ -105,7 +105,7 @@ spec:
         resources: {}
       # etcdbrctl, a sidecar which backs-up and restores etcd
       - name: etcd-backup-restore-control
-        image: asauber/etcdbrctl:0.4.1mod
+        image: linode-docker.artifactory.linode.com/lke/etcdbrctl:0.6.0lke01
         command:
         - etcdbrctl
         - server
@@ -116,7 +116,7 @@ spec:
         - --data-dir=/var/etcd/data/new.etcd
         - --storage-provider=S3
         # This is the S3 bucket name
-        - --store-prefix=lke-etcd-backups/{{ .Release.Namespace }}
+        - --store-prefix={{ .Release.Namespace }}
         - --cert=/etc/kubernetes/pki/client/etcd/apiserver-etcd-client.crt
         - --key=/etc/kubernetes/pki/client/etcd/apiserver-etcd-client.key
         - --cacert=/etc/kubernetes/pki/etcd/ca.crt
@@ -136,10 +136,13 @@ spec:
         env:
         # The subdomain which hosts Object Storage
         - name: STORAGE_CONTAINER
-          value: minio
+          value: lke-etcd-backups
         # The domain which hosts Object Storagee
         - name: OBJECT_STORAGE_ENDPOINT
-          value: sellabrite.com
+          valueFrom:
+            secretKeyRef:
+              name: object-storage
+              key: endpoint
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:

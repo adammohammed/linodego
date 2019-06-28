@@ -19,6 +19,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 
 	"bits.linode.com/LinodeAPI/cluster-api-provider-lke/pkg/apis"
@@ -32,7 +33,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )
 
+// set at link-time (see the Makefile)
+var caplkeVersion string
+
 func main() {
+	fmt.Printf("cluster-api provider LKE starting up with verison %s\n", caplkeVersion)
 	flag.Parse()
 
 	// Get a config to talk to the apiserver
