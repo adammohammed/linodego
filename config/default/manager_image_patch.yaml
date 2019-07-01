@@ -7,5 +7,5 @@ spec:
   template:
     spec:
       containers:
-      - image: linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:canaryrc1
+      - image: linode-docker.artifactory.linode.com/lke/cluster-api-provider-lke:canaryrc1
         name: manager
