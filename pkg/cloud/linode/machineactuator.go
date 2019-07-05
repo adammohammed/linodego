@@ -54,6 +54,11 @@ const (
 	machineLinodeIDAnnotationName = "linode-id"
 )
 
+var (
+	trueValue  = true
+	falseValue = false
+)
+
 type LinodeClient struct {
 	client        client.Client
 	scheme        *runtime.Scheme
@@ -213,6 +218,7 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 			StackScriptID:   initScript.stackScript.ID,
 			StackScriptData: initScript.stackScriptData,
 			AuthorizedKeys:  clusterConfig.AuthorizedKeys,
+			Booted:          &trueValue,
 		})
 		instanceCreationTimeoutSeconds := 600
 		if err == nil {
