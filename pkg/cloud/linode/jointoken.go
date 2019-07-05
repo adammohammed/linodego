@@ -24,14 +24,14 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // run_prog executes a local process prog and returns the standard output of that
 // process and an error, if any.
 func run_prog(prog string, args ...string) (string, error) {
-	glog.Infof("running cmd='%s' args=%v", prog, args)
+	klog.Infof("running cmd='%s' args=%v", prog, args)
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(prog, args...)
@@ -41,10 +41,10 @@ func run_prog(prog string, args ...string) (string, error) {
 
 	outStr, errStr := string(stdout.Bytes()), string(stderr.Bytes())
 	if outStr != "" {
-		glog.Infof("%s: STDOUT='%s'", prog, strings.TrimSpace(outStr))
+		klog.Infof("%s: STDOUT='%s'", prog, strings.TrimSpace(outStr))
 	}
 	if errStr != "" {
-		glog.Infof("%s: STDERR='%s'", prog, strings.TrimSpace(errStr))
+		klog.Infof("%s: STDERR='%s'", prog, strings.TrimSpace(errStr))
 	}
 
 	return strings.TrimSpace(outStr), err
