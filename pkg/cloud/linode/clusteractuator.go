@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/golang/glog"
 	"golang.org/x/net/context"
+	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,7 +73,7 @@ func NewClusterActuator(m manager.Manager, params ClusterActuatorParams) (*Linod
 }
 
 func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling cluster %v.", cluster.Name)
+	klog.Infof("Reconciling cluster %v.", cluster.Name)
 	if err := lcc.reconcileControlPlane(cluster); err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
 // Validate that control plane services are deployed and running with expected configuration
 // If they are not, deploy or modify them
 func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling control plane for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling control plane for cluster %v.", cluster.Name)
 
 	ip, err := lcc.reconcileAPIServerService(cluster)
 	if err != nil {
@@ -138,7 +138,7 @@ func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster
 }
 
 func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Cluster) (string, error) {
-	glog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
 	// TODO: validate that API Server has an endpoint and return one if it does
 
 	// TODO: Use Ingress for this! Don't provision a NodeBalancer per LKE cluster
@@ -159,14 +159,14 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 	if err != nil {
 		return "", fmt.Errorf("Could not find kube-apiserver Service for cluster %v", cluster.Name)
 	}
-	glog.Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiserverService.Name)
+	klog.Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiserverService.Name)
 	if len(apiserverService.Status.LoadBalancer.Ingress) < 1 {
 		return "", fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
 	}
 	ip := apiserverService.Status.LoadBalancer.Ingress[0].IP
 
 	// Write that NodeBalancer address as the cluster API endpoint
-	glog.Infof("External IP for kube-apiserver for cluster %v: %v", cluster.Name, ip)
+	klog.Infof("External IP for kube-apiserver for cluster %v: %v", cluster.Name, ip)
 	if err := lcc.writeClusterEndpoint(cluster, ip); err != nil {
 		return "", err
 	}
@@ -174,7 +174,7 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 }
 
 func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster, ip string) error {
-	glog.Infof("Updating cluster endpoint %v: %v.\n", cluster.Name, ip)
+	klog.Infof("Updating cluster endpoint %v: %v.\n", cluster.Name, ip)
 	cluster.Status.APIEndpoints = []clusterv1.APIEndpoint{{
 		Host: ip,
 		Port: 6443,
@@ -183,7 +183,7 @@ func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster,
 }
 
 func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster, ip string) error {
-	glog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
 	// TODO: validate that API Server is running for the cluster
 
 	// Deploy API Server for the LKE cluster
@@ -193,7 +193,7 @@ func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster, i
 	}
 
 	if err := lcc.chartDeployer.DeployChart(apiserverChartPath, cluster.Name, values); err != nil {
-		glog.Errorf("Error reconciling apiserver for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error reconciling apiserver for cluster %v: %v", cluster.Name, err)
 
 		return err
 	}
@@ -202,13 +202,13 @@ func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster, i
 }
 
 func (lcc *LinodeClusterClient) reconcileEtcd(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling etcd for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling etcd for cluster %v.", cluster.Name)
 	// TODO: validate that etcd is running for the cluster
 
 	// Deploy etcd for the LKE cluster
 	values := make(map[string]interface{})
 	if err := lcc.chartDeployer.DeployChart(etcdChartPath, cluster.Name, values); err != nil {
-		glog.Errorf("Error reconciling etcd for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error reconciling etcd for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
@@ -216,7 +216,7 @@ func (lcc *LinodeClusterClient) reconcileEtcd(cluster *clusterv1.Cluster) error 
 }
 
 func (lcc *LinodeClusterClient) reconcileControllerManager(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling kube-controller-manager for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling kube-controller-manager for cluster %v.", cluster.Name)
 	// TODO: validate that kube-controller-manager is running for the cluster
 
 	// Deploy the controller-manager for the LKE cluster
@@ -225,7 +225,7 @@ func (lcc *LinodeClusterClient) reconcileControllerManager(cluster *clusterv1.Cl
 	}
 
 	if err := lcc.chartDeployer.DeployChart(cmChartPath, cluster.Name, values); err != nil {
-		glog.Errorf("Error reconciling kube-controller-manager for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error reconciling kube-controller-manager for cluster %v: %v", cluster.Name, err)
 
 		return err
 	}
@@ -234,7 +234,7 @@ func (lcc *LinodeClusterClient) reconcileControllerManager(cluster *clusterv1.Cl
 }
 
 func (lcc *LinodeClusterClient) reconcileScheduler(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling scheduler for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling scheduler for cluster %v.", cluster.Name)
 	// TODO: validate that scheduler is running for the cluster
 	// Dont re-deploy the scheduler if we don't need to
 
@@ -244,7 +244,7 @@ func (lcc *LinodeClusterClient) reconcileScheduler(cluster *clusterv1.Cluster) e
 	}
 
 	if err := lcc.chartDeployer.DeployChart(schedChartPath, cluster.Name, values); err != nil {
-		glog.Errorf("Error reconciling scheduler for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error reconciling scheduler for cluster %v: %v", cluster.Name, err)
 
 		return err
 	}
@@ -253,16 +253,16 @@ func (lcc *LinodeClusterClient) reconcileScheduler(cluster *clusterv1.Cluster) e
 }
 
 func (lcc *LinodeClusterClient) reconcileKubeletResources(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling kubelet resources for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling kubelet resources for cluster %v.", cluster.Name)
 
 	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
 	if err != nil {
-		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
 	if err := chartDeployerLKE.DeployChart(kubeletResourcesPath, "kube-system", map[string]interface{}{}); err != nil {
-		glog.Errorf("Error reconciling kubelet resources for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error reconciling kubelet resources for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
@@ -281,7 +281,7 @@ func (lcc *LinodeClusterClient) reconcileKubeletResources(cluster *clusterv1.Clu
  *   $ka init phase addon coredns --service-cidr 10.128.0.0/16
  */
 func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(cluster *clusterv1.Cluster, ip string) error {
-	glog.Infof("Reconciling kubelet resources for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling kubelet resources for cluster %v.", cluster.Name)
 
 	kubeconfig, err := tempKubeconfig(lcc.client, cluster.Name)
 	if err != nil {
@@ -309,16 +309,16 @@ func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(cluster *clusterv1.
 }
 
 func (lcc *LinodeClusterClient) reconcileCNI(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling CNI for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling CNI for cluster %v.", cluster.Name)
 
 	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
 	if err != nil {
-		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
 	if err := chartDeployerLKE.DeployChart(cniResourcesPath, "kube-system", map[string]interface{}{}); err != nil {
-		glog.Errorf("Error reconciling CNI for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error reconciling CNI for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
@@ -326,12 +326,12 @@ func (lcc *LinodeClusterClient) reconcileCNI(cluster *clusterv1.Cluster) error {
 }
 
 func (lcc *LinodeClusterClient) reconcileCCM(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling CCM for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling CCM for cluster %v.", cluster.Name)
 
 	values := map[string]interface{}{}
 
 	if err := lcc.chartDeployer.DeployChart(ccmChartPath, cluster.Name, values); err != nil {
-		glog.Errorf("Error reconciling CCM for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error reconciling CCM for cluster %v: %v", cluster.Name, err)
 
 		return err
 	}
@@ -378,11 +378,11 @@ func copyLinodeSecret(cpcClient, lkeClient client.Client, namespace string) erro
 }
 
 func (lcc *LinodeClusterClient) reconcileCSI(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling CSI for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling CSI for cluster %v.", cluster.Name)
 
 	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
 	if err != nil {
-		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
@@ -393,14 +393,14 @@ func (lcc *LinodeClusterClient) reconcileCSI(cluster *clusterv1.Cluster) error {
 
 	// Copy linode secret from CPC to LKE
 	if err := copyLinodeSecret(lcc.client, lkeClient, clusterNamespace(cluster.Name)); err != nil {
-		glog.Errorf("Error creating a linode secret in the LKE %v: %v", cluster.Name, err)
+		klog.Errorf("Error creating a linode secret in the LKE %v: %v", cluster.Name, err)
 		return err
 	}
 
 	values := map[string]interface{}{}
 
 	if err := chartDeployerLKE.DeployChart(csiResourcePath, "kube-system", values); err != nil {
-		glog.Errorf("Error reconciling CSI for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error reconciling CSI for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
@@ -408,18 +408,18 @@ func (lcc *LinodeClusterClient) reconcileCSI(cluster *clusterv1.Cluster) error {
 }
 
 func (lcc *LinodeClusterClient) reconcileWG(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling WG controller for cluster %v.", cluster.Name)
+	klog.Infof("Reconciling WG controller for cluster %v.", cluster.Name)
 
 	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
 	if err != nil {
-		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
 	values := map[string]interface{}{}
 
 	if err := chartDeployerLKE.DeployChart(wgLKECredsResourcePath, "kube-system", values); err != nil {
-		glog.Errorf("Error reconciling WG credentials for cluster %v: %v", cluster.Name, err)
+		klog.Errorf("Error reconciling WG credentials for cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
@@ -427,6 +427,6 @@ func (lcc *LinodeClusterClient) reconcileWG(cluster *clusterv1.Cluster) error {
 }
 
 func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
-	glog.Infof("Deleting cluster %v.", cluster.Name)
+	klog.Infof("Deleting cluster %v.", cluster.Name)
 	return nil
 }

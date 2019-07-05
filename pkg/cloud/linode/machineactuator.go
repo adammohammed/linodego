@@ -25,7 +25,6 @@ import (
 
 	lkeconfigv1 "bits.linode.com/LinodeAPI/cluster-api-provider-lke/pkg/apis/lkeproviderconfig/v1alpha1"
 	"github.com/ghodss/yaml"
-	"github.com/golang/glog"
 	"github.com/linode/linodego"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	bootstraputil "k8s.io/client-go/tools/bootstrap/token/util"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/klog"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
 	apierrors "sigs.k8s.io/cluster-api/pkg/errors"
 	"sigs.k8s.io/cluster-api/pkg/kubeadm"
@@ -141,13 +141,13 @@ func (lc *LinodeClient) validateMachine(machine *clusterv1.Machine, config *lkec
 func (lc *LinodeClient) Create(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 
 	err := lc.create(ctx, cluster, machine)
-	glog.Infof("creating machine %v/%v: err=%v", cluster.Name, machine.Name, err)
+	klog.Infof("creating machine %v/%v: err=%v", cluster.Name, machine.Name, err)
 	return err
 
 }
 
 func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
-	glog.Infof("Creating machine %v/%v", cluster.Name, machine.Name)
+	klog.Infof("Creating machine %v/%v", cluster.Name, machine.Name)
 
 	instance, err := lc.instanceIfExists(cluster, machine)
 	if err != nil {
@@ -182,7 +182,7 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 			return fmt.Errorf("Couldn't get WG public key for cluster %s: %v", cluster.Name, err)
 		}
 
-		glog.Infof("roles %v", machineConfig.Roles)
+		klog.Infof("roles %v", machineConfig.Roles)
 		initScript, err := lc.getInitScript(token, cluster, machine, machineConfig, wgPubKey)
 		if err != nil {
 			return err
@@ -234,7 +234,7 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 		/* Annotate Machine object with Linode ID */
 		lc.AnnotateMachine(machine, machineLinodeIDAnnotationName, strconv.FormatInt(int64(instance.ID), 10))
 	} else {
-		glog.Infof("Skipped creating a VM that already exists.\n")
+		klog.Infof("Skipped creating a VM that already exists.\n")
 	}
 	return nil
 }
@@ -244,7 +244,7 @@ func (lc *LinodeClient) AnnotateMachine(machine *clusterv1.Machine, key string, 
 		machine.ObjectMeta.Annotations = make(map[string]string)
 	}
 	machine.ObjectMeta.Annotations[key] = value
-	glog.Infof("Annotating machine with %s: %s", key, value)
+	klog.Infof("Annotating machine with %s: %s", key, value)
 	return lc.client.Update(context.Background(), machine)
 }
 
@@ -254,7 +254,7 @@ func (lc *LinodeClient) updateClusterEndpoint(cluster *clusterv1.Cluster, instan
 	for _, ip := range instance.IPv4 {
 		ipString := ip.String()
 		if !strings.HasPrefix(ipString, "192.168.") {
-			glog.Infof("Updating cluster endpoint %v.\n", ipString)
+			klog.Infof("Updating cluster endpoint %v.\n", ipString)
 			cluster.Status.APIEndpoints = []clusterv1.APIEndpoint{{
 				Host: ipString,
 				Port: 6443,
@@ -281,17 +281,17 @@ func (lc *LinodeClient) handleMachineError(machine *clusterv1.Machine, err *apie
 		lc.eventRecorder.Eventf(machine, corev1.EventTypeWarning, "Failed"+eventAction, "%v", err.Reason)
 	}
 
-	glog.Errorf("Machine error: %v", err.Message)
+	klog.Errorf("Machine error: %v", err.Message)
 	return err
 }
 
 func (lc *LinodeClient) Delete(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 	linodeIDStr, ok := machine.ObjectMeta.Annotations[machineLinodeIDAnnotationName]
 	if !ok {
-		glog.Infof("Deleting machine resource, but no Linode deleted (no Linode ID annotation)")
+		klog.Infof("Deleting machine resource, but no Linode deleted (no Linode ID annotation)")
 		return nil
 	}
-	glog.Infof("Deleting Linode with ID %s", linodeIDStr)
+	klog.Infof("Deleting Linode with ID %s", linodeIDStr)
 
 	linodeID, err := strconv.Atoi(linodeIDStr)
 	if err != nil {
@@ -315,25 +315,25 @@ func (lc *LinodeClient) Delete(ctx context.Context, cluster *clusterv1.Cluster, 
 		 * an infinite loop and won't be able to delete a machine.
 		 */
 		if ok && original_err.Code == 404 {
-			glog.Infof("Linode with ID %s doesn't exist; Deleting machine anyway", linodeIDStr)
+			klog.Infof("Linode with ID %s doesn't exist; Deleting machine anyway", linodeIDStr)
 			return nil
 		}
 
 		return fmt.Errorf("Error deleting Linode %d: %s", linodeID, err.Error())
 	}
 
-	glog.Infof("Deleted Linode with ID %s", linodeIDStr)
+	klog.Infof("Deleted Linode with ID %s", linodeIDStr)
 	return nil
 }
 
 func (lc *LinodeClient) Update(ctx context.Context, cluster *clusterv1.Cluster, goalMachine *clusterv1.Machine) error {
-	glog.Infof("TODO (Not Implemented): Updating machine with cluster %v.", cluster.Name)
-	glog.Infof("TODO (Not Implemented): Updating machine %v.", goalMachine.Name)
+	klog.Infof("TODO (Not Implemented): Updating machine with cluster %v.", cluster.Name)
+	klog.Infof("TODO (Not Implemented): Updating machine %v.", goalMachine.Name)
 	return nil
 }
 
 func (lc *LinodeClient) Exists(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) (bool, error) {
-	glog.Infof("Checking Exists for machine %v/%v", cluster.Name, machine.Name)
+	klog.Infof("Checking Exists for machine %v/%v", cluster.Name, machine.Name)
 	instance, err := lc.instanceIfExists(cluster, machine)
 	if err != nil {
 		return false, err
@@ -404,13 +404,13 @@ func getInstanceByLabel(linodeClient *linodego.Client, label string) (*linodego.
 }
 
 func (lc *LinodeClient) GetIP(cluster *clusterv1.Cluster, machine *clusterv1.Machine) (string, error) {
-	glog.Infof("TODO (Not Implemented): Getting IP for machine with cluster %v.", cluster.Name)
-	glog.Infof("TODO (Not Implemented): Getting IP for machine %v.", machine.Name)
+	klog.Infof("TODO (Not Implemented): Getting IP for machine with cluster %v.", cluster.Name)
+	klog.Infof("TODO (Not Implemented): Getting IP for machine %v.", machine.Name)
 	return "", nil
 }
 
 func (lc *LinodeClient) GetKubeConfig(cluster *clusterv1.Cluster, master *clusterv1.Machine) (string, error) {
-	glog.Infof("TODO (Not Implemented): Getting KubeConfig for master with cluster %v.", cluster.Name)
-	glog.Infof("TODO (Not Implemented): Getting KubeConfig for master %v.", master.Name)
+	klog.Infof("TODO (Not Implemented): Getting KubeConfig for master with cluster %v.", cluster.Name)
+	klog.Infof("TODO (Not Implemented): Getting KubeConfig for master %v.", master.Name)
 	return "", nil
 }
