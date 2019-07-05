@@ -393,6 +393,34 @@ func generateNodeWatcherSecrets(client client.Client, cluster *clusterv1.Cluster
 }
 
 /*
+ * create a secret containing credentials to access object storage
+ *
+ *     apiVersion: v1
+ *     kind: Secret
+ *     data:
+ *       access: $access
+ *       secret: $secret
+ *       endpoint: $endpoint
+ *     metadata:
+ *       name: object-storage
+ *       namespace: kube-system-$CLUSTER_NAME
+ *
+ */
+func generateObjectStorageSecrets(client client.Client, cluster *clusterv1.Cluster) error {
+
+	name := "object-storage"
+
+	objStorageSecret := &corev1.Secret{}
+	if err := client.Get(context.Background(),
+		types.NamespacedName{Namespace: "kube-system", Name: name},
+		objStorageSecret); err != nil {
+		return err
+	}
+
+	return createOpaqueSecret(client, cluster.GetNamespace(), name, objStorageSecret.Data)
+}
+
+/*
  * create secrets needed for operation of control plane components
  */
 func (lcc *LinodeClusterClient) generateSecrets(cluster *clusterv1.Cluster) error {
@@ -405,6 +433,11 @@ func (lcc *LinodeClusterClient) generateSecrets(cluster *clusterv1.Cluster) erro
 
 	if err := generateNodeWatcherSecrets(lcc.client, cluster); err != nil {
 		glog.Errorf("Error generating NodeWatcher token for cluster %v: %v.", cluster.Name, err)
+		return err
+	}
+
+	if err := generateObjectStorageSecrets(lcc.client, cluster); err != nil {
+		glog.Errorf("Error generating ObjectStorage secrets for cluster %v: %v.", cluster.Name, err)
 		return err
 	}
 
