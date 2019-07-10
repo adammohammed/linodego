@@ -116,7 +116,7 @@ spec:
         - --data-dir=/var/etcd/data/new.etcd
         - --storage-provider=S3
         # This is the S3 bucket name
-        - --store-prefix={{ .Release.Namespace }}
+        - --store-prefix={{ .Values.StorePrefix }}
         - --cert=/etc/kubernetes/pki/client/etcd/apiserver-etcd-client.crt
         - --key=/etc/kubernetes/pki/client/etcd/apiserver-etcd-client.key
         - --cacert=/etc/kubernetes/pki/etcd/ca.crt
