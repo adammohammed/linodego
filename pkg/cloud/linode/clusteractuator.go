@@ -205,8 +205,21 @@ func (lcc *LinodeClusterClient) reconcileEtcd(cluster *clusterv1.Cluster) error 
 	klog.Infof("Reconciling etcd for cluster %v.", cluster.Name)
 	// TODO: validate that etcd is running for the cluster
 
+	secret := &corev1.Secret{}
+	name := types.NamespacedName{Namespace: "kube-system", Name: "linode"}
+	if err := lcc.client.Get(context.Background(), name, secret); err != nil {
+		return err
+	}
+
 	// Deploy etcd for the LKE cluster
-	values := make(map[string]interface{})
+	values := map[string]interface{}{
+		// StorePrefix example: us-east/cpc1190/12ahd312/lke123123
+		"StorePrefix": fmt.Sprintf("%s/cpc%s/%s/%s",
+			secret.Data["region"],
+			secret.Data["id"],
+			secret.Data["timestamp"],
+			cluster.Name),
+	}
 	if err := lcc.chartDeployer.DeployChart(etcdChartPath, cluster.Name, values); err != nil {
 		klog.Errorf("Error reconciling etcd for cluster %v: %v", cluster.Name, err)
 		return err
