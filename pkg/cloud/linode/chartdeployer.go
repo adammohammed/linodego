@@ -8,8 +8,8 @@ import (
 	"github.com/gardener/gardener/pkg/chartrenderer"
 	"github.com/gardener/gardener/pkg/client/kubernetes"
 	kubernetesbase "github.com/gardener/gardener/pkg/client/kubernetes/base"
+	"github.com/golang/glog"
 	"golang.org/x/net/context"
-	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -51,8 +51,8 @@ func (cd *ChartDeployer) DeployChart(chartPath, namespace string, values map[str
 	if err != nil {
 		return err
 	}
-	klog.Infof("We are deploying the following manifests")
-	klog.Infof("%v", renderedChart.Files)
+	glog.Infof("We are deploying the following manifests")
+	glog.Infof("%v", renderedChart.Files)
 	return cd.client.Apply(renderedChart.Manifest())
 }
 

@@ -19,12 +19,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"log"
 
 	"bits.linode.com/LinodeAPI/cluster-api-provider-lke/pkg/apis"
 	"bits.linode.com/LinodeAPI/cluster-api-provider-lke/pkg/cloud/linode"
 	"bits.linode.com/LinodeAPI/cluster-api-provider-lke/pkg/controller"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/klog"
 	clusterapis "sigs.k8s.io/cluster-api/pkg/apis"
 	clustercommon "sigs.k8s.io/cluster-api/pkg/apis/cluster/common"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -36,56 +37,49 @@ import (
 var caplkeVersion string
 
 func main() {
-	klog.Infof("cluster-api provider LKE starting up with verison %s\n", caplkeVersion)
-
-	// Init klog
-	klog.InitFlags(nil)
-
-	// parse flags from all packages
+	fmt.Printf("cluster-api provider LKE starting up with verison %s\n", caplkeVersion)
 	flag.Parse()
-
-	klog.Infof("Cluster API Provider LKE starting up.")
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
 	if err != nil {
-		klog.Fatal(err)
+		log.Fatal(err)
 	}
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{})
 	if err != nil {
-		klog.Fatal(err)
+		log.Fatal(err)
 	}
 
-	klog.Infof("Initializing Dependencies.")
+	log.Printf("Initializing Dependencies.")
 	machineActuator, err := linode.NewMachineActuator(mgr, linode.MachineActuatorParams{
 		Scheme:        mgr.GetScheme(),
 		EventRecorder: mgr.GetRecorder("linode-controller"),
 	})
 	if err != nil {
-		klog.Fatal(err)
+		log.Fatal(err)
 	}
 	clustercommon.RegisterClusterProvisioner(linode.ProviderName, machineActuator)
 
-	klog.Infof("Registering Components.")
+	log.Printf("Registering Components.")
 
 	// Setup Scheme for all resources
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
-		klog.Fatal(err)
+		log.Fatal(err)
 	}
 
 	if err := clusterapis.AddToScheme(mgr.GetScheme()); err != nil {
-		klog.Fatal(err)
+		log.Fatal(err)
 	}
 
 	// Setup all Controllers
 	if err := controller.AddToManager(mgr); err != nil {
-		klog.Fatal(err)
+		log.Fatal(err)
 	}
 
-	klog.Infof("Starting the Cmd.")
+	log.Printf("Starting the Cmd.")
 
 	// Start the Cmd
-	klog.Fatal(mgr.Start(signals.SetupSignalHandler()))
+	log.Fatal(mgr.Start(signals.SetupSignalHandler()))
 }
