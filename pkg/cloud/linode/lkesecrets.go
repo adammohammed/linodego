@@ -27,7 +27,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
@@ -43,7 +43,7 @@ func createOpaqueSecret(client client.Client, namespace, name string, data map[s
 		types.NamespacedName{Namespace: namespace, Name: name},
 		testSecret)
 	if len(testSecret.Name) > 0 {
-		glog.Infof("Not writing a secret that already exists")
+		klog.Infof("Not writing a secret that already exists")
 		return nil
 	}
 
@@ -74,10 +74,10 @@ func run(prog string, args ...string) (string, error) {
 
 	outStr, errStr := string(stdout.Bytes()), string(stderr.Bytes())
 	if outStr != "" {
-		glog.Infof("stdout:\n%v", outStr)
+		klog.Infof("stdout:\n%v", outStr)
 	}
 	if errStr != "" {
-		glog.Infof("stderr:\n%v", errStr)
+		klog.Infof("stderr:\n%v", errStr)
 	}
 
 	return strings.TrimSpace(outStr), err
@@ -424,20 +424,20 @@ func generateObjectStorageSecrets(client client.Client, cluster *clusterv1.Clust
  * create secrets needed for operation of control plane components
  */
 func (lcc *LinodeClusterClient) generateSecrets(cluster *clusterv1.Cluster) error {
-	glog.Infof("Creating secrets for cluster %v.", cluster.Name)
+	klog.Infof("Creating secrets for cluster %v.", cluster.Name)
 
 	if err := generateCertSecrets(lcc.client, cluster); err != nil {
-		glog.Errorf("Error generating certs for cluster %v: %v.", cluster.Name, err)
+		klog.Errorf("Error generating certs for cluster %v: %v.", cluster.Name, err)
 		return err
 	}
 
 	if err := generateNodeWatcherSecrets(lcc.client, cluster); err != nil {
-		glog.Errorf("Error generating NodeWatcher token for cluster %v: %v.", cluster.Name, err)
+		klog.Errorf("Error generating NodeWatcher token for cluster %v: %v.", cluster.Name, err)
 		return err
 	}
 
 	if err := generateObjectStorageSecrets(lcc.client, cluster); err != nil {
-		glog.Errorf("Error generating ObjectStorage secrets for cluster %v: %v.", cluster.Name, err)
+		klog.Errorf("Error generating ObjectStorage secrets for cluster %v: %v.", cluster.Name, err)
 		return err
 	}
 
