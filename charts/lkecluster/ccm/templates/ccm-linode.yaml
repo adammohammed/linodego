@@ -31,7 +31,7 @@ spec:
           effect: NoSchedule
       hostNetwork: false
       containers:
-        - image: linode/linode-cloud-controller-manager:canary
+        - image: linode/linode-cloud-controller-manager:v0.2.3
           imagePullPolicy: Always
           name: ccm-linode
           args:
@@ -41,6 +41,10 @@ spec:
           volumeMounts:
           - mountPath: /etc/kubernetes
             name: k8s-admin
+          # FOR DEV ONLY, TODO: use a kustomize patch
+          - mountPath: /tls
+            name: cacert
+          #end FOR DEV ONLY
           env:
             - name: LINODE_API_TOKEN
               valueFrom:
@@ -52,7 +56,21 @@ spec:
                 secretKeyRef:
                   name: linode
                   key: region
+            # FOR DEV ONLY, TODO: use a kustomize patch
+            - name: LINODE_URL
+              value: https://api.dev.linode.com/v4/
+            - name: LINODE_CA
+              value: /tls/cacert.pem
+            - name: LINODE_DEBUG
+              value: "1"
+            #end FOR DEV ONLY
       volumes:
       - name: k8s-admin
         secret:
           secretName: admin-kubeconfig
+      # FOR DEV ONLY, TODO: use a kustomize patch
+      - secret:
+          defaultMode: 420
+          secretName: linode-ca
+        name: cacert
+      #end FOR DEV ONLY

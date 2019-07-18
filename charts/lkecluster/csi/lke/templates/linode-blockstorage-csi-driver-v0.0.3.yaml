@@ -314,7 +314,7 @@ spec:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
         - name: linode-csi-plugin
-          image: linode/linode-blockstorage-csi-driver:v0.0.3
+          image: linode/linode-blockstorage-csi-driver:v0.1.3
           args :
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--token=$(LINODE_TOKEN)"
@@ -338,13 +338,31 @@ spec:
                 secretKeyRef:
                   name: linode
                   key: token
+            # FOR DEV ONLY, TODO: use a kustomize patch
+            - name: LINODE_URL
+              value: https://api.dev.linode.com/v4/
+            - name: LINODE_CA
+              value: /tls/cacert.pem
+            - name: LINODE_DEBUG
+              value: "1"
+            #end FOR DEV ONLY
           imagePullPolicy: "Always"
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
+            # FOR DEV ONLY, TODO: use a kustomize patch
+            - mountPath: /tls
+              name: cacert
+            #end FOR DEV ONLY
       volumes:
         - name: socket-dir
           emptyDir: {}
+        # FOR DEV ONLY, TODO: use a kustomize patch
+        - secret:
+            defaultMode: 420
+            secretName: linode-ca
+          name: cacert
+        #end FOR DEV ONLY
 ---
 # pkg/linode-bs/deploy/kubernetes/07-ds-csi-linode-node.yaml
 kind: DaemonSet
@@ -389,7 +407,7 @@ spec:
             - name: registration-dir
               mountPath: /registration/
         - name: csi-linode-plugin 
-          image: linode/linode-blockstorage-csi-driver:v0.0.3
+          image: linode/linode-blockstorage-csi-driver:v0.1.3
           args :
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--token=$(LINODE_TOKEN)"
@@ -410,6 +428,14 @@ spec:
                 secretKeyRef:
                   name: linode
                   key: token
+            # FOR DEV ONLY, TODO: use a kustomize patch
+            - name: LINODE_URL
+              value: https://api.dev.linode.com/v4/
+            - name: LINODE_CA
+              value: /tls/cacert.pem
+            - name: LINODE_DEBUG
+              value: "1"
+            #end FOR DEV ONLY
           imagePullPolicy: "Always"
           securityContext:
             privileged: true
@@ -426,6 +452,10 @@ spec:
               mountPropagation: "Bidirectional"
             - mountPath: /dev
               name: device-dir
+            # FOR DEV ONLY, TODO: use a kustomize patch
+            - mountPath: /tls
+              name: cacert
+            #end FOR DEV ONLY
       volumes:
         - name: registration-dir
           hostPath:
@@ -463,3 +493,9 @@ spec:
           hostPath:
             path: /sys
             type: Directory
+        # FOR DEV ONLY, TODO: use a kustomize patch
+        - secret:
+            defaultMode: 420
+            secretName: linode-ca
+          name: cacert
+        #end FOR DEV ONLY

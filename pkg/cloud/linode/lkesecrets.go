@@ -450,6 +450,25 @@ func generateContainerRegistrySecrets(client client.Client, cluster *clusterv1.C
 }
 
 /*
+ * Place the internal Linode CA into a configmap in the child cluster so that the CCM and CSI can load it
+ * TODO: Only do this when a --clusters-env=dev flag is present
+ */
+func generateLinodeCAConfigMap(client client.Client, cluster *clusterv1.Cluster) error {
+
+	name := "linode-ca"
+
+	linodeCAConfigMap := &corev1.ConfigMap{}
+	if err := client.Get(context.Background(),
+		types.NamespacedName{Namespace: "kube-system", Name: name},
+		linodeCAConfigMap); err != nil {
+		return err
+	}
+
+	data := map[string][]byte{"cacert.pem": []byte(linodeCAConfigMap.Data["cacert.pem"])}
+	return createOpaqueSecret(client, cluster.GetNamespace(), name, data)
+}
+
+/*
  * create secrets needed for operation of control plane components
  * TODO: Refactor with command pattern
  */
