@@ -164,6 +164,8 @@ spec:
           mountPath: /var/etcd/data
       ## Only pods in kube-system can have this priorityClassName
       ## priorityClassName: system-cluster-critical
+      imagePullSecrets:
+        - name: artifactory-creds
       volumes:
       - name: etcd-certs
         secret:

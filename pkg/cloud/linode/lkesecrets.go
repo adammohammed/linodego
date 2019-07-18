@@ -421,7 +421,37 @@ func generateObjectStorageSecrets(client client.Client, cluster *clusterv1.Clust
 }
 
 /*
+ * create a secret containing artifactory credentials
+ *
+ *   apiVersion: v1
+ *   kind: Secret
+ *   type: kubernetes.io/dockerconfigjson
+ *   metadata:
+ *   annotations:
+ *     name: artifactory-creds
+ *   namespace: kube-system-$CLUSTER_NAME
+ *   stringData:
+ *     .dockerconfigjson: '{"auths":{"linode-docker.artifactory.linode.com":{"username":"lke-reader","password":"<REDACTED>","auth":"<REDACTED>"}}}'
+ *
+ *  We currently copy the secret from the kube-system namespace.
+ */
+func generateContainerRegistrySecrets(client client.Client, cluster *clusterv1.Cluster) error {
+
+	name := "artifactory-creds"
+
+	containerRegistrySecret := &corev1.Secret{}
+	if err := client.Get(context.Background(),
+		types.NamespacedName{Namespace: "kube-system", Name: name},
+		containerRegistrySecret); err != nil {
+		return err
+	}
+
+	return createOpaqueSecret(client, cluster.GetNamespace(), name, containerRegistrySecret.Data)
+}
+
+/*
  * create secrets needed for operation of control plane components
+ * TODO: Refactor with command pattern
  */
 func (lcc *LinodeClusterClient) generateSecrets(cluster *clusterv1.Cluster) error {
 	glog.Infof("Creating secrets for cluster %v.", cluster.Name)
@@ -438,6 +468,11 @@ func (lcc *LinodeClusterClient) generateSecrets(cluster *clusterv1.Cluster) erro
 
 	if err := generateObjectStorageSecrets(lcc.client, cluster); err != nil {
 		glog.Errorf("Error generating ObjectStorage secrets for cluster %v: %v.", cluster.Name, err)
+		return err
+	}
+
+	if err := generateContainerRegistrySecrets(lcc.client, cluster); err != nil {
+		glog.Errorf("Error generating ContainerRegistry secrets for cluster %v: %v.", cluster.Name, err)
 		return err
 	}
 
