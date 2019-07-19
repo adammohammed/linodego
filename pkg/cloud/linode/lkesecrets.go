@@ -37,7 +37,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func createOpaqueSecret(client client.Client, namespace, name string, data map[string][]byte) error {
+// createSecret creates a secret with the given type in the given namespace.
+func createSecret(client client.Client, secretType corev1.SecretType, namespace, name string, data map[string][]byte) error {
 	testSecret := &corev1.Secret{}
 	client.Get(context.Background(),
 		types.NamespacedName{Namespace: namespace, Name: name},
@@ -53,10 +54,18 @@ func createOpaqueSecret(client client.Client, namespace, name string, data map[s
 		Namespace: namespace,
 		Name:      name,
 	}
-	secret.Type = corev1.SecretTypeOpaque
+	secret.Type = secretType
 	secret.Data = data
 
 	return client.Create(context.Background(), secret)
+}
+
+func createDockerSecret(client client.Client, namespace, name string, data map[string][]byte) error {
+	return createSecret(client, corev1.SecretTypeDockerConfigJson, namespace, name, data)
+}
+
+func createOpaqueSecret(client client.Client, namespace, name string, data map[string][]byte) error {
+	return createSecret(client, corev1.SecretTypeOpaque, namespace, name, data)
 }
 
 /* Temporarily holds PKI data for a cluster */
