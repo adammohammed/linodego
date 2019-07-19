@@ -455,7 +455,7 @@ func generateContainerRegistrySecrets(client client.Client, cluster *clusterv1.C
 		return err
 	}
 
-	return createOpaqueSecret(client, cluster.GetNamespace(), name, containerRegistrySecret.Data)
+	return createDockerSecret(client, cluster.GetNamespace(), name, containerRegistrySecret.Data)
 }
 
 /*
