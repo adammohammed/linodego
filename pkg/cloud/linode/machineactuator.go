@@ -156,7 +156,7 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 
 	instance, err := lc.instanceIfExists(cluster, machine)
 	if err != nil {
-		return err
+		return fmt.Errorf("Couldn't test if Linode instance exists %v", err)
 	}
 
 	if instance == nil {
