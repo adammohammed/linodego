@@ -326,7 +326,10 @@ spec:
             - name: CSI_ENDPOINT
               value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
             - name: LINODE_API_URL
-              value: https://api.linode.com/v4
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: apiurl
             - name: LINODE_BS_PREFIX
               value:
             - name: NODE_NAME
@@ -340,7 +343,10 @@ spec:
                   key: token
             # FOR DEV ONLY, TODO: use a kustomize patch
             - name: LINODE_URL
-              value: https://api.dev.linode.com/v4/
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: apiurl
             - name: LINODE_CA
               value: /tls/cacert.pem
             - name: LINODE_DEBUG
