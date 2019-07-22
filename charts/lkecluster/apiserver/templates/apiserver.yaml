@@ -122,6 +122,8 @@ spec:
       dnsPolicy: ClusterFirst
       # only kube-system namespace can have this priorityClassName
       # priorityClassName: system-cluster-critical
+      imagePullSecrets:
+        - name: artifactory-creds
       volumes:
       - name: k8s-certs
         secret:
