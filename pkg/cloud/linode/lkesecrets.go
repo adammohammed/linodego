@@ -54,7 +54,9 @@ func createSecret(client client.Client, secretType corev1.SecretType, namespace,
 		testSecret)
 	if len(testSecret.Name) > 0 {
 		glog.Infof("We are replacing an existing secret %s: %s", namespace, name)
-		return client.Delete(context.Background(), secret)
+		if err := client.Delete(context.Background(), secret); err != nil {
+			return err
+		}
 	}
 
 	return client.Create(context.Background(), secret)
