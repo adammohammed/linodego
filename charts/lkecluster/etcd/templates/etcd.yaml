@@ -135,24 +135,32 @@ spec:
         resources: {}
         env:
         # The subdomain which hosts Object Storage
+        # This is also the bucket name
         - name: STORAGE_CONTAINER
           value: lke-etcd-backups
         # The domain which hosts Object Storagee
+        # Example: us-east-1.linodeobjects.com
         - name: OBJECT_STORAGE_ENDPOINT
           valueFrom:
             secretKeyRef:
               name: object-storage
               key: endpoint
+        # The object storage Acess Key (s3 interface, legacy AWS name here)
+        # Example: 5PHIEDGHVCE8DX42D85M
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
               name: object-storage
               key: access
+        # The object storage Secret Key (se interface, legacy AWS name here)
+        # Example: WT3PCMP6VJZgpbSApea16IDqA0EsyKo7QbCvSeFD
         - name: AWS_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
               name: object-storage
               key: secret
+        # The Object Storage region
+        # Ignored with our modifications to this controller, but must be present
         - name: AWS_REGION
           value: us-east
         volumeMounts:
