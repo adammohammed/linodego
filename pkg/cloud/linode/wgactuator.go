@@ -51,7 +51,7 @@ func (lc *LinodeClient) savePrivateKey(key, namespace string) (string, error) {
 		"key": []byte(key),
 	}
 
-	err := createOpaqueSecret(lc.client, namespace, name, data)
+	err := createOpaqueSecret(lc.client, namespace, name, data, false)
 	if err != nil {
 		return "", err
 	}
