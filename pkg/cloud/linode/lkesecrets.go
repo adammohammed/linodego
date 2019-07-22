@@ -39,15 +39,6 @@ import (
 
 // createSecret creates a secret with the given type in the given namespace.
 func createSecret(client client.Client, secretType corev1.SecretType, namespace, name string, data map[string][]byte) error {
-	testSecret := &corev1.Secret{}
-	client.Get(context.Background(),
-		types.NamespacedName{Namespace: namespace, Name: name},
-		testSecret)
-	if len(testSecret.Name) > 0 {
-		glog.Infof("Not writing a secret that already exists")
-		return nil
-	}
-
 	secret := &corev1.Secret{}
 
 	secret.ObjectMeta = metav1.ObjectMeta{
@@ -56,6 +47,15 @@ func createSecret(client client.Client, secretType corev1.SecretType, namespace,
 	}
 	secret.Type = secretType
 	secret.Data = data
+
+	testSecret := &corev1.Secret{}
+	client.Get(context.Background(),
+		types.NamespacedName{Namespace: namespace, Name: name},
+		testSecret)
+	if len(testSecret.Name) > 0 {
+		glog.Infof("We are replacing an existing secret %s: %s", namespace, name)
+		return client.Delete(context.Background(), secret)
+	}
 
 	return client.Create(context.Background(), secret)
 }
