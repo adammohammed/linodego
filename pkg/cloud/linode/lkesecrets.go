@@ -38,7 +38,12 @@ import (
 )
 
 // createSecret creates a secret with the given type in the given namespace.
-func createSecret(client client.Client, secretType corev1.SecretType, namespace, name string, data map[string][]byte) error {
+func createSecret(client client.Client,
+	secretType corev1.SecretType,
+	namespace, name string,
+	data map[string][]byte,
+	overwrite bool,
+) error {
 	secret := &corev1.Secret{}
 
 	secret.ObjectMeta = metav1.ObjectMeta{
@@ -53,7 +58,13 @@ func createSecret(client client.Client, secretType corev1.SecretType, namespace,
 		types.NamespacedName{Namespace: namespace, Name: name},
 		testSecret)
 	if len(testSecret.Name) > 0 {
-		glog.Infof("We are replacing an existing secret %s: %s", namespace, name)
+		if !overwrite {
+			glog.Infof("[%s] Not writing a secret which already exists: %s", namespace, name)
+			// Pass if the secret already exists and overwrite is false
+			return nil
+		}
+
+		glog.Infof("[%s] We are replacing an existing secret: %s", namespace, name)
 		if err := client.Delete(context.Background(), secret); err != nil {
 			return err
 		}
@@ -62,12 +73,12 @@ func createSecret(client client.Client, secretType corev1.SecretType, namespace,
 	return client.Create(context.Background(), secret)
 }
 
-func createDockerSecret(client client.Client, namespace, name string, data map[string][]byte) error {
-	return createSecret(client, corev1.SecretTypeDockerConfigJson, namespace, name, data)
+func createDockerSecret(client client.Client, namespace, name string, data map[string][]byte, overwrite bool) error {
+	return createSecret(client, corev1.SecretTypeDockerConfigJson, namespace, name, data, overwrite)
 }
 
-func createOpaqueSecret(client client.Client, namespace, name string, data map[string][]byte) error {
-	return createSecret(client, corev1.SecretTypeOpaque, namespace, name, data)
+func createOpaqueSecret(client client.Client, namespace, name string, data map[string][]byte, overwrite bool) error {
+	return createSecret(client, corev1.SecretTypeOpaque, namespace, name, data, overwrite)
 }
 
 /* Temporarily holds PKI data for a cluster */
@@ -346,19 +357,19 @@ func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster) error
 	ns := cluster.GetNamespace()
 
 	// Write secrets for the core k8s PKI material
-	if err := createOpaqueSecret(client, ns, "k8s-certs", k8sCerts); err != nil {
+	if err := createOpaqueSecret(client, ns, "k8s-certs", k8sCerts, false); err != nil {
 		return err
 	}
 
 	// Write secrets for the etcd PKI material
-	if err := createOpaqueSecret(client, ns, "etcd-certs", etcdCerts); err != nil {
+	if err := createOpaqueSecret(client, ns, "etcd-certs", etcdCerts, false); err != nil {
 		return err
 	}
 
 	// Write secrets for each of the client kubeconfigs that we generated for
 	// the admin, controller-manager, scheduler, and kubelet
 	for secretName, secretMap := range kubeconfigs {
-		if err := createOpaqueSecret(client, ns, secretName, secretMap); err != nil {
+		if err := createOpaqueSecret(client, ns, secretName, secretMap, false); err != nil {
 			return err
 		}
 	}
@@ -400,7 +411,7 @@ func generateNodeWatcherSecrets(client client.Client, cluster *clusterv1.Cluster
 
 	name := "wg-node-watcher-token"
 	data := map[string][]byte{name: token}
-	return createOpaqueSecret(client, cluster.GetNamespace(), name, data)
+	return createOpaqueSecret(client, cluster.GetNamespace(), name, data, false)
 }
 
 /*
@@ -428,7 +439,7 @@ func generateObjectStorageSecrets(client client.Client, cluster *clusterv1.Clust
 		return err
 	}
 
-	return createOpaqueSecret(client, cluster.GetNamespace(), name, objStorageSecret.Data)
+	return createOpaqueSecret(client, cluster.GetNamespace(), name, objStorageSecret.Data, false)
 }
 
 /*
@@ -457,7 +468,7 @@ func generateContainerRegistrySecrets(client client.Client, cluster *clusterv1.C
 		return err
 	}
 
-	return createDockerSecret(client, cluster.GetNamespace(), name, containerRegistrySecret.Data)
+	return createDockerSecret(client, cluster.GetNamespace(), name, containerRegistrySecret.Data, true)
 }
 
 /*
@@ -476,7 +487,7 @@ func generateLinodeCAConfigMap(client client.Client, cluster *clusterv1.Cluster)
 	}
 
 	data := map[string][]byte{"cacert.pem": []byte(linodeCAConfigMap.Data["cacert.pem"])}
-	return createOpaqueSecret(client, cluster.GetNamespace(), name, data)
+	return createOpaqueSecret(client, cluster.GetNamespace(), name, data, false)
 }
 
 /*
