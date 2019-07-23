@@ -441,5 +441,6 @@ func (lcc *LinodeClusterClient) reconcileWG(cluster *clusterv1.Cluster) error {
 
 func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 	glog.Infof("Deleting cluster %v.", cluster.Name)
+	// if there are any manchines return
 	return nil
 }
