@@ -428,7 +428,7 @@ func generateNodeWatcherSecrets(client client.Client, cluster *clusterv1.Cluster
  *       namespace: kube-system-$CLUSTER_NAME
  *
  */
-func generateObjectStorageSecrets(client client.Client, cluster *clusterv1.Cluster) error {
+func writeObjectStorageSecrets(client client.Client, cluster *clusterv1.Cluster) error {
 
 	name := "object-storage"
 
@@ -457,7 +457,7 @@ func generateObjectStorageSecrets(client client.Client, cluster *clusterv1.Clust
  *
  *  We currently copy the secret from the kube-system namespace.
  */
-func generateContainerRegistrySecrets(client client.Client, cluster *clusterv1.Cluster) error {
+func writeContainerRegistrySecrets(client client.Client, cluster *clusterv1.Cluster) error {
 
 	name := "artifactory-creds"
 
@@ -473,9 +473,8 @@ func generateContainerRegistrySecrets(client client.Client, cluster *clusterv1.C
 
 /*
  * Place the internal Linode CA into a configmap in the child cluster so that the CCM and CSI can load it
- * TODO: Only do this when a --clusters-env=dev flag is present
  */
-func generateLinodeCAConfigMap(client client.Client, cluster *clusterv1.Cluster) error {
+func writeLinodeCASecrets(client client.Client, cluster *clusterv1.Cluster) error {
 
 	name := "linode-ca"
 
@@ -491,29 +490,62 @@ func generateLinodeCAConfigMap(client client.Client, cluster *clusterv1.Cluster)
 }
 
 /*
+ * Update the 'linode' secret with the current environment's Linode API URL
+ */
+func updateLinodeSecrets(client client.Client, clusterNamespace string) error {
+
+	name := "linode"
+
+	linodeSecret := &corev1.Secret{}
+	if err := client.Get(context.Background(),
+		types.NamespacedName{Namespace: clusterNamespace, Name: name},
+		linodeSecret); err != nil {
+		return err
+	}
+
+	// Add the current environment's Linode API URL to the secret data
+	ourLinodeURL, set := os.LookupEnv("LINODE_URL")
+	if !set {
+		return fmt.Errorf("[%s] LINODE_URL has not been set in the environment", clusterNamespace)
+	}
+	linodeSecret.Data["apiurl"] = []byte(ourLinodeURL)
+	return client.Update(context.Background(), linodeSecret)
+}
+
+/*
  * create secrets needed for operation of control plane components
- * TODO: Refactor with command pattern
  */
 func (lcc *LinodeClusterClient) generateSecrets(cluster *clusterv1.Cluster) error {
 	glog.Infof("Creating secrets for cluster %v.", cluster.Name)
+	clusterNamespace := cluster.GetNamespace()
 
 	if err := generateCertSecrets(lcc.client, cluster); err != nil {
-		glog.Errorf("Error generating certs for cluster %v: %v.", cluster.Name, err)
+		glog.Errorf("[%s] Error generating certs for cluster: %v", clusterNamespace, err)
 		return err
 	}
 
 	if err := generateNodeWatcherSecrets(lcc.client, cluster); err != nil {
-		glog.Errorf("Error generating NodeWatcher token for cluster %v: %v.", cluster.Name, err)
+		glog.Errorf("[%s] Error generating NodeWatcher token for cluster: %v", clusterNamespace, err)
 		return err
 	}
 
-	if err := generateObjectStorageSecrets(lcc.client, cluster); err != nil {
-		glog.Errorf("Error generating ObjectStorage secrets for cluster %v: %v.", cluster.Name, err)
+	if err := writeObjectStorageSecrets(lcc.client, cluster); err != nil {
+		glog.Errorf("[%s] Error writing ObjectStorage secrets for cluster: %v", clusterNamespace, err)
 		return err
 	}
 
-	if err := generateContainerRegistrySecrets(lcc.client, cluster); err != nil {
-		glog.Errorf("Error generating ContainerRegistry secrets for cluster %v: %v.", cluster.Name, err)
+	if err := writeContainerRegistrySecrets(lcc.client, cluster); err != nil {
+		glog.Errorf("[%s] Error writing ContainerRegistry secrets for cluster: %v", clusterNamespace, err)
+		return err
+	}
+
+	if err := updateLinodeSecrets(lcc.client, clusterNamespace); err != nil {
+		glog.Errorf("[%s] Error updating Linode secrets: %v", clusterNamespace, err)
+		return err
+	}
+
+	if err := writeLinodeCASecrets(lcc.client, cluster); err != nil {
+		glog.Errorf("[%s] Error generating Linode CA secrets: %v", clusterNamespace, err)
 		return err
 	}
 
