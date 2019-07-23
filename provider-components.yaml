@@ -202,6 +202,13 @@ spec:
           name: config
         - mountPath: /etc/ssl/certs
           name: certs
+        # Needed for pre-prod environments
+        # Example: https://api.dev.linode.com/v4/
+        - name: LINODE_URL
+          valueFrom:
+            secretKeyRef:
+              name: linode
+              key: apiurl
       serviceAccount: default
       terminationGracePeriodSeconds: 10
       tolerations:
