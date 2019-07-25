@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= linode-docker.artifactory.linode.com/lke/cluster-api-provider-lke:canaryrc1
+IMG ?= linode-docker.artifactory.linode.com/lke/cluster-api-provider-lke:canary
 ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 REVISION = $(shell sh revision.sh)
 export GO111MODULE=on
