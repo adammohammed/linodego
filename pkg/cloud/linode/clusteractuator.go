@@ -439,8 +439,31 @@ func (lcc *LinodeClusterClient) reconcileWG(cluster *clusterv1.Cluster) error {
 	return nil
 }
 
+// Delete attempts to perform deletion for an LKE cluster. If the cluster should
+// not be deleted, return an Error and cluster-api will requeue the Cluster for
+// deletion.
 func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
-	glog.Infof("Deleting cluster %v.", cluster.Name)
-	// if there are any manchines return
+	clusterNamespace := cluster.GetNamespace()
+	glog.Infof("[%s] Attempting to deleting this Cluster", clusterNamespace)
+
+	// List all Machines for this cluster. If any Machines exist for this cluster
+	// we cannot delete it.
+
+	// Prepare an empty Machine struct to be filled by the list operation.
+	machineList := &clusterv1.MachineList{}
+	// Create a ListOptions struct filtering on this cluster's namespace.
+	listOptions := client.InNamespace(cluster.GetNamespace())
+	// List all Machines in this Cluster's namespace.
+	if err := lcc.client.List(context.Background(), listOptions, machineList); err != nil {
+		return fmt.Errorf("[%s] Error deleting Cluster. Error listing Machines for cluster: %v", clusterNamespace, err)
+	}
+
+	// If there are remaining Machines we must return an Error
+	if len(machineList.Items) > 0 {
+		return fmt.Errorf("[%s] Error deleting Cluster. "+
+			"The Cluster still has associated Machines which need "+
+			"this Cluster object in order to be deleted", clusterNamespace)
+	}
+
 	return nil
 }
