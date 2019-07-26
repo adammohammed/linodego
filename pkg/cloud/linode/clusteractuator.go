@@ -451,7 +451,7 @@ func (lcc *LinodeClusterClient) reconcileWG(cluster *clusterv1.Cluster) error {
 // requeue this Cluster for deletion.
 func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 	clusterNamespace := cluster.GetNamespace()
-	glog.Infof("[%s] Attempting to deleting this Cluster", clusterNamespace)
+	glog.Infof("[%s] Attempting to delete this Cluster", clusterNamespace)
 
 	// Delete the control plane Pod-creating resources including CCM (not
 	// Secrets/ConfigMaps), so that we immediately prevent the Linode user from
