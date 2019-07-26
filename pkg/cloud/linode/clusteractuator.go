@@ -42,16 +42,17 @@ const (
 	cmChartPath               = lkeclusterPath + "/" + "controller-manager"
 	schedChartPath            = lkeclusterPath + "/" + "scheduler"
 
-	kubeletResourcesPath      = lkeclusterPath + "/" + "kubelet-resources"
-	cniResourcesPath          = lkeclusterPath + "/" + "cni"
-	ccmChartPath              = lkeclusterPath + "/" + "ccm"
+	kubeletResourcesPath = lkeclusterPath + "/" + "kubelet-resources"
+	cniResourcesPath     = lkeclusterPath + "/" + "cni"
+	ccmChartPath         = lkeclusterPath + "/" + "ccm"
 
-	csiResourcePath           = lkeclusterPath + "/" + "csi/lke"
+	csiResourcePath = lkeclusterPath + "/" + "csi/lke"
 
-	wgPath                    = lkeclusterPath + "/" + "wg"
-	wgLKECredsResourcePath    = wgPath + "/" + "lke/clusterroles"
+	wgPath                 = lkeclusterPath + "/" + "wg"
+	wgLKECredsResourcePath = wgPath + "/" + "lke/clusterroles"
 
-	ClusterFinalizer          = "cluster.lke.linode.com"
+	// ClusterFinalizer can be used on any cluster-related resource
+	ClusterFinalizer = "cluster.lke.linode.com"
 )
 
 type LinodeClusterClient struct {
@@ -384,15 +385,15 @@ func copyLinodeSecret(cpcClient, lkeClient client.Client, namespace string) erro
 		Name:      "linode",
 		// Add a finalizer. We can't allow this secret to be deleted until all of this
 		// cluster's Linode services have been deleted.
-		Finalizers: []string{linode.ClusterFinalizer},
+		Finalizers: []string{ClusterFinalizer},
 	}
-	if err := lkeClient.Get(context.Background(), types.NamespacedName{Namespace: "kube-system", Name: "linode"}, lkeSecret); err == nil {
+	if err := lkeClient.Get(context.Background(), types.NamespacedName{Namespace: "kube-system", Name: "linode"}, linodeSecret); err == nil {
 		return nil
 	}
 
-	lkeSecret.Type = corev1.SecretTypeOpaque
-	lkeSecret.Data = secret.Data // note: not a deep copy
-	return lkeClient.Create(context.Background(), lkeSecret)
+	linodeSecret.Type = corev1.SecretTypeOpaque
+	linodeSecret.Data = secret.Data // note: not a deep copy
+	return lkeClient.Create(context.Background(), linodeSecret)
 }
 
 func (lcc *LinodeClusterClient) reconcileCSI(cluster *clusterv1.Cluster) error {
@@ -469,25 +470,36 @@ func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 		return fmt.Errorf(errStr)
 	}
 
-	// Delete Machines, the actual Deletion of the Linode will be handled by machineactuator.go
-	// The cremoval of the Machine finalizer will be handled async by the cluster-api
-	// TODO
-	for _, machine := range machineList.Items {
-		if err := lcc.client.Delete(context.Background(), machine); err != nil {
-
-		}
-	}
-
 	if len(machineList.Items) > 0 {
 		return fmt.Errorf("[%s] Error deleting Cluster. "+
 			"Delete all Machines associated with this cluster", clusterNamespace)
 	}
 
 	// If there are no Machines, then we can remove the finalizer on the Linode secret
-	// TODO
+	linodeSecret := &corev1.Secret{}
+	if err := lcc.client.Get(context.Background(),
+		types.NamespacedName{Namespace: clusterNamespace, Name: "linode"},
+		linodeSecret); err != nil {
+		glog.Errorf("[%s] Could not get linode secret in order to remove finalizer. "+
+			"Continuing with Cluster delete anyway", clusterNamespace)
+	}
+	linodeSecret.Finalizers = []string{}
+	if err := lcc.client.Update(context.Background(), linodeSecret); err != nil {
+		glog.Errorf("[%s] Could not get linode secret in order to remove finalizer. "+
+			"Continuing with Cluster delete anyway", clusterNamespace)
+	}
 
 	// Delete our own namespace to clean everything else up
-	// TODO
+	clusterNamespaceObject := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: clusterNamespace,
+		},
+	}
+
+	if err := lcc.client.Delete(context.Background(), clusterNamespaceObject); err != nil {
+		return fmt.Errorf("[%s] Error deleting Cluster namespace while deleting cluster",
+			clusterNamespace)
+	}
 
 	return nil
 }
