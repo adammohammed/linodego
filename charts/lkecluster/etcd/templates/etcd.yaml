@@ -80,7 +80,7 @@ spec:
       containers:
       # etcd, the central datastore for each LKE cluster
       - name: etcd
-        image: k8s.gcr.io/etcd-amd64:3.3.12
+        image: quay.io/coreos/etcd:v3.3.12
         command:
         - /bootstrap/bootstrap.sh
         volumeMounts:
