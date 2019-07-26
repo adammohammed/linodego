@@ -42,14 +42,16 @@ const (
 	cmChartPath               = lkeclusterPath + "/" + "controller-manager"
 	schedChartPath            = lkeclusterPath + "/" + "scheduler"
 
-	kubeletResourcesPath = lkeclusterPath + "/" + "kubelet-resources"
-	cniResourcesPath     = lkeclusterPath + "/" + "cni"
-	ccmChartPath         = lkeclusterPath + "/" + "ccm"
+	kubeletResourcesPath      = lkeclusterPath + "/" + "kubelet-resources"
+	cniResourcesPath          = lkeclusterPath + "/" + "cni"
+	ccmChartPath              = lkeclusterPath + "/" + "ccm"
 
-	csiResourcePath = lkeclusterPath + "/" + "csi/lke"
+	csiResourcePath           = lkeclusterPath + "/" + "csi/lke"
 
-	wgPath                 = lkeclusterPath + "/" + "wg"
-	wgLKECredsResourcePath = wgPath + "/" + "lke/clusterroles"
+	wgPath                    = lkeclusterPath + "/" + "wg"
+	wgLKECredsResourcePath    = wgPath + "/" + "lke/clusterroles"
+
+	ClusterFinalizer          = "cluster.lke.linode.com"
 )
 
 type LinodeClusterClient struct {
@@ -376,10 +378,13 @@ func copyLinodeSecret(cpcClient, lkeClient client.Client, namespace string) erro
 		return err
 	}
 
-	lkeSecret := &corev1.Secret{}
-	lkeSecret.ObjectMeta = metav1.ObjectMeta{
+	linodeSecret := &corev1.Secret{}
+	linodeSecret.ObjectMeta = metav1.ObjectMeta{
 		Namespace: "kube-system",
 		Name:      "linode",
+		// Add a finalizer. We can't allow this secret to be deleted until all of this
+		// cluster's Linode services have been deleted.
+		Finalizers: []string{linode.ClusterFinalizer},
 	}
 	if err := lkeClient.Get(context.Background(), types.NamespacedName{Namespace: "kube-system", Name: "linode"}, lkeSecret); err == nil {
 		return nil
@@ -439,31 +444,50 @@ func (lcc *LinodeClusterClient) reconcileWG(cluster *clusterv1.Cluster) error {
 	return nil
 }
 
-// Delete attempts to perform deletion for an LKE cluster. If the cluster should
-// not be deleted, return an Error and cluster-api will requeue the Cluster for
-// deletion.
+// Delete attempts to perform deletion for an LKE cluster.
+//
+// If the cluster should not be deleted, return an Error and cluster-api will
+// requeue this Cluster for deletion.
 func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 	clusterNamespace := cluster.GetNamespace()
 	glog.Infof("[%s] Attempting to deleting this Cluster", clusterNamespace)
 
+	// Delete the control plane Pod-creating resources including CCM (not
+	// Secrets/ConfigMaps), so that we immediately prevent the Linode user from
+	// adding additional resources to this Cluster.
+	// TODO
+
 	// List all Machines for this cluster. If any Machines exist for this cluster
 	// we cannot delete it.
-
-	// Prepare an empty Machine struct to be filled by the list operation.
 	machineList := &clusterv1.MachineList{}
-	// Create a ListOptions struct filtering on this cluster's namespace.
 	listOptions := client.InNamespace(cluster.GetNamespace())
-	// List all Machines in this Cluster's namespace.
 	if err := lcc.client.List(context.Background(), listOptions, machineList); err != nil {
-		return fmt.Errorf("[%s] Error deleting Cluster. Error listing Machines for cluster: %v", clusterNamespace, err)
+		errStr := fmt.Sprintf("[%s] Error deleting Cluster. Error listing Machines for cluster: %v", clusterNamespace, err)
+		// Print the err that we return to cluster-api so that we can filter logs
+		// using our prefix
+		glog.Errorf(errStr)
+		return fmt.Errorf(errStr)
 	}
 
-	// If there are remaining Machines we must return an Error
+	// Delete Machines, the actual Deletion of the Linode will be handled by machineactuator.go
+	// The cremoval of the Machine finalizer will be handled async by the cluster-api
+	// TODO
+	for _, machine := range machineList.Items {
+		if err := lcc.client.Delete(context.Background(), machine); err != nil {
+
+		}
+	}
+
 	if len(machineList.Items) > 0 {
 		return fmt.Errorf("[%s] Error deleting Cluster. "+
-			"The Cluster still has associated Machines which need "+
-			"this Cluster object in order to be deleted", clusterNamespace)
+			"Delete all Machines associated with this cluster", clusterNamespace)
 	}
+
+	// If there are no Machines, then we can remove the finalizer on the Linode secret
+	// TODO
+
+	// Delete our own namespace to clean everything else up
+	// TODO
 
 	return nil
 }
