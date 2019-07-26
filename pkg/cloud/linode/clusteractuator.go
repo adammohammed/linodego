@@ -383,9 +383,6 @@ func copySecretToChild(cpcClient, lkeClient client.Client, namespace string, sec
 	newSecret.ObjectMeta = metav1.ObjectMeta{
 		Namespace: "kube-system",
 		Name:      secretName,
-		// Add a finalizer. We can't allow this secret to be deleted until all of this
-		// cluster's Linode services have been deleted.
-		Finalizers: []string{ClusterFinalizer},
 	}
 	if err := lkeClient.Get(context.Background(), types.NamespacedName{Namespace: "kube-system", Name: secretName}, newSecret); err == nil {
 		return nil
