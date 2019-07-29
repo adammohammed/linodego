@@ -125,6 +125,8 @@ rules:
   resources:
   - secrets
   - events
+  - services
+  - configmaps
   - namespaces
   verbs:
   - get
