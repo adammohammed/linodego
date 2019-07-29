@@ -125,6 +125,7 @@ rules:
   resources:
   - secrets
   - events
+  - namespaces
   verbs:
   - get
   - list
