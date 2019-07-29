@@ -47,11 +47,12 @@ const (
 )
 
 const (
-	createEventAction             = "Create"
-	deleteEventAction             = "Delete"
-	noEventAction                 = ""
-	linodeAPITokenSecretName      = "linode"
-	machineLinodeIDAnnotationName = "linode-id"
+	createEventAction                 = "Create"
+	deleteEventAction                 = "Delete"
+	noEventAction                     = ""
+	linodeAPITokenSecretName          = "linode"
+	machineLinodeIDAnnotationName     = "linode-id"
+	machineLinodeStatusAnnotationname = "linode-status"
 )
 
 var (
@@ -239,6 +240,9 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 
 		/* Annotate Machine object with Linode ID */
 		lc.AnnotateMachine(machine, machineLinodeIDAnnotationName, strconv.FormatInt(int64(instance.ID), 10))
+		/* Annotate Machine blindly with 'ready' status.
+		   TODO: Proxy the actual Kubernetes Node status */
+		lc.AnnotateMachine(machine, machineLinodeStatusAnnotationname, "ready")
 	} else {
 		glog.Infof("Skipped creating a VM that already exists.\n")
 	}
