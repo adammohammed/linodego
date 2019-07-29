@@ -51,8 +51,10 @@ const (
 	wgPath                 = lkeclusterPath + "/" + "wg"
 	wgLKECredsResourcePath = wgPath + "/" + "lke/clusterroles"
 
-	// ClusterFinalizer can be used on any cluster-related resource
-	ClusterFinalizer = "cluster.lke.linode.com"
+	// ClusterFinalizer can be used on any cluster-related resource This name must
+	// include a '/'. See
+	// https://github.com/kubernetes/kubernetes/blob/v1.15.1/pkg/apis/core/validation/validation.go#L5072
+	ClusterFinalizer = "lke.linode.com/cluster"
 )
 
 type LinodeClusterClient struct {
