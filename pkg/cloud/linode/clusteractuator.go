@@ -500,13 +500,13 @@ func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 
 	// If no Machines remain then we can remove the finalizers from the critical Secrets
 	if err := lcc.removeFinalizerFromSecret(clusterNamespace, "linode"); err != nil {
-		glog.Errorf("[%s] Error removing finalizer from secret \"%s\""+
-			"Continuing with Cluster delete anyway", clusterNamespace, "linode")
+		glog.Errorf("[%s] Error removing finalizer from secret \"%s\": %s"+
+			"Continuing with Cluster delete anyway", clusterNamespace, "linode", err)
 	}
 
 	if err := lcc.removeFinalizerFromSecret(clusterNamespace, "linode-ca"); err != nil {
-		glog.Errorf("[%s] Error removing finalizer from secret \"%s\""+
-			"Continuing with Cluster delete anyway", clusterNamespace, "linode-ca")
+		glog.Errorf("[%s] Error removing finalizer from secret \"%s\": %s"+
+			"Continuing with Cluster delete anyway", clusterNamespace, "linode-ca", err)
 	}
 
 	// Delete our own namespace to clean everything else up
@@ -516,8 +516,8 @@ func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 		},
 	}
 	if err := lcc.client.Delete(context.Background(), clusterNamespaceObject); err != nil {
-		return fmt.Errorf("[%s] Error deleting Cluster namespace while deleting cluster",
-			clusterNamespace)
+		return fmt.Errorf("[%s] Error deleting Cluster namespace while deleting cluster: %s",
+			clusterNamespace, err)
 	}
 
 	return nil
