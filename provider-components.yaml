@@ -191,7 +191,7 @@ spec:
         - -logtostderr=true
         - -stderrthreshold=INFO
         image: linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:v0.1.0
-        imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
         name: manager
         resources:
           limits:

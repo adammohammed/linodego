@@ -297,7 +297,7 @@ spec:
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
-          imagePullPolicy: "Always"
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
@@ -309,7 +309,7 @@ spec:
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
-          imagePullPolicy: "Always"
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
@@ -352,7 +352,7 @@ spec:
             - name: LINODE_DEBUG
               value: "1"
             #end FOR DEV ONLY
-          imagePullPolicy: "Always"
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
@@ -453,7 +453,7 @@ spec:
               value: /tls/cacert.pem
             - name: LINODE_DEBUG
               value: "1"
-          imagePullPolicy: "Always"
+          imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
             capabilities:

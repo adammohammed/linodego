@@ -106,7 +106,7 @@ spec:
               fieldRef:
                 fieldPath: metadata.namespace
         image: linode-docker.artifactory.linode.com/lke/wg-node-controller:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         resources:
           requests:
             cpu: 50m

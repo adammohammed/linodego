@@ -32,7 +32,7 @@ spec:
       hostNetwork: false
       containers:
         - image: linode/linode-cloud-controller-manager:v0.2.3
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           name: ccm-linode
           args:
           - --cloud-provider=linode
