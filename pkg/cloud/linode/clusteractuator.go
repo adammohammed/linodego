@@ -459,6 +459,7 @@ func (lcc *LinodeClusterClient) removeFinalizerFromSecret(clusterNamespace strin
 		secret); err != nil {
 		glog.Errorf("[%s] Could not get secret \"%s\" in order to remove finalizer. "+
 			"Continuing with Cluster delete anyway", clusterNamespace, secretName)
+		return nil
 	}
 	secret.Finalizers = []string{}
 	if err := lcc.client.Update(context.Background(), secret); err != nil {
