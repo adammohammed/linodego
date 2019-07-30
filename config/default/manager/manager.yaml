@@ -54,7 +54,7 @@ spec:
       containers:
       - name: manager
         image: SET_BY_PATCH
-        imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
         args:
         - "-logtostderr=true"
         - "-stderrthreshold=INFO"

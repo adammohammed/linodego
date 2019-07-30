@@ -50,6 +50,11 @@ const (
 
 	wgPath                 = lkeclusterPath + "/" + "wg"
 	wgLKECredsResourcePath = wgPath + "/" + "lke/clusterroles"
+
+	// ClusterFinalizer can be used on any cluster-related resource This name must
+	// include a '/'. See
+	// https://github.com/kubernetes/kubernetes/blob/v1.15.1/pkg/apis/core/validation/validation.go#L5072
+	ClusterFinalizer = "lke.linode.com/cluster"
 )
 
 type LinodeClusterClient struct {
@@ -369,25 +374,25 @@ func lkeClientNew(cpcClient client.Client, cluster string) (client.Client, error
 
 // copies the 'kube-system-<cluster>/linode' secret in CPC to the
 // 'kube-system/linode' secret in LKE cluster <cluster>
-func copyLinodeSecret(cpcClient, lkeClient client.Client, namespace string) error {
+func copySecretToChild(cpcClient, lkeClient client.Client, namespace string, secretName string) error {
 
 	secret := &corev1.Secret{}
-	if err := cpcClient.Get(context.Background(), types.NamespacedName{Namespace: namespace, Name: "linode"}, secret); err != nil {
+	if err := cpcClient.Get(context.Background(), types.NamespacedName{Namespace: namespace, Name: secretName}, secret); err != nil {
 		return err
 	}
 
-	lkeSecret := &corev1.Secret{}
-	lkeSecret.ObjectMeta = metav1.ObjectMeta{
+	newSecret := &corev1.Secret{}
+	newSecret.ObjectMeta = metav1.ObjectMeta{
 		Namespace: "kube-system",
-		Name:      "linode",
+		Name:      secretName,
 	}
-	if err := lkeClient.Get(context.Background(), types.NamespacedName{Namespace: "kube-system", Name: "linode"}, lkeSecret); err == nil {
+	if err := lkeClient.Get(context.Background(), types.NamespacedName{Namespace: "kube-system", Name: secretName}, newSecret); err == nil {
 		return nil
 	}
 
-	lkeSecret.Type = corev1.SecretTypeOpaque
-	lkeSecret.Data = secret.Data // note: not a deep copy
-	return lkeClient.Create(context.Background(), lkeSecret)
+	newSecret.Type = corev1.SecretTypeOpaque
+	newSecret.Data = secret.Data // note: not a deep copy
+	return lkeClient.Create(context.Background(), newSecret)
 }
 
 func (lcc *LinodeClusterClient) reconcileCSI(cluster *clusterv1.Cluster) error {
@@ -404,9 +409,15 @@ func (lcc *LinodeClusterClient) reconcileCSI(cluster *clusterv1.Cluster) error {
 		return err
 	}
 
-	// Copy linode secret from CPC to LKE
-	if err := copyLinodeSecret(lcc.client, lkeClient, clusterNamespace(cluster.Name)); err != nil {
+	// Copy linode secret from CPC to child cluster
+	if err := copySecretToChild(lcc.client, lkeClient, clusterNamespace(cluster.Name), "linode"); err != nil {
 		glog.Errorf("Error creating a linode secret in the LKE %v: %v", cluster.Name, err)
+		return err
+	}
+
+	// Copy the linode-ca secret from CPC to child cluster
+	if err := copySecretToChild(lcc.client, lkeClient, clusterNamespace(cluster.Name), "linode-ca"); err != nil {
+		glog.Errorf("Error copying the Linode CA cert to the LKE cluster %v: %v", cluster.Name, err)
 		return err
 	}
 
@@ -439,7 +450,76 @@ func (lcc *LinodeClusterClient) reconcileWG(cluster *clusterv1.Cluster) error {
 	return nil
 }
 
+func (lcc *LinodeClusterClient) removeFinalizerFromSecret(clusterNamespace string, secretName string) error {
+	// If there are no Machines, then we can remove the finalizers on the critical Secrets
+	// NB: Don't block deletion (yet) for this reason. (Don't return Error)
+	secret := &corev1.Secret{}
+	if err := lcc.client.Get(context.Background(),
+		types.NamespacedName{Namespace: clusterNamespace, Name: secretName},
+		secret); err != nil {
+		glog.Errorf("[%s] Could not get secret \"%s\" in order to remove finalizer. "+
+			"Continuing with Cluster delete anyway", clusterNamespace, secretName)
+		return nil
+	}
+	secret.Finalizers = []string{}
+	if err := lcc.client.Update(context.Background(), secret); err != nil {
+		glog.Errorf("[%s] Could not get secret \"%s\" in order to remove finalizer. "+
+			"Continuing with Cluster delete anyway", clusterNamespace, secretName)
+	}
+	return nil
+}
+
+// Delete attempts to perform deletion for an LKE cluster.
+//
+// If the cluster should not be deleted, return an Error and cluster-api will
+// requeue this Cluster for deletion.
 func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
-	glog.Infof("Deleting cluster %v.", cluster.Name)
+	clusterNamespace := cluster.GetNamespace()
+	glog.Infof("[%s] Attempting to delete this Cluster", clusterNamespace)
+
+	// Delete the control plane Pod-creating resources including CCM (not
+	// Secrets/ConfigMaps), so that we immediately prevent the Linode user from
+	// adding additional resources to this Cluster.
+	// TODO
+
+	// List all Machines for this cluster. If any Machines exist for this cluster
+	// we cannot delete it.
+	machineList := &clusterv1.MachineList{}
+	listOptions := client.InNamespace(cluster.GetNamespace())
+	if err := lcc.client.List(context.Background(), listOptions, machineList); err != nil {
+		errStr := fmt.Sprintf("[%s] Error deleting Cluster. Error listing Machines for cluster: %v", clusterNamespace, err)
+		// Print the err that we return to cluster-api so that we can filter logs
+		// using our prefix
+		glog.Errorf(errStr)
+		return fmt.Errorf(errStr)
+	}
+
+	if len(machineList.Items) > 0 {
+		return fmt.Errorf("[%s] Error deleting Cluster. "+
+			"Delete all Machines associated with this cluster", clusterNamespace)
+	}
+
+	// If no Machines remain then we can remove the finalizers from the critical Secrets
+	if err := lcc.removeFinalizerFromSecret(clusterNamespace, "linode"); err != nil {
+		glog.Errorf("[%s] Error removing finalizer from secret \"%s\": %s"+
+			"Continuing with Cluster delete anyway", clusterNamespace, "linode", err)
+	}
+
+	if err := lcc.removeFinalizerFromSecret(clusterNamespace, "linode-ca"); err != nil {
+		glog.Errorf("[%s] Error removing finalizer from secret \"%s\": %s"+
+			"Continuing with Cluster delete anyway", clusterNamespace, "linode-ca", err)
+	}
+
+	// Delete our own namespace to clean everything else up
+	clusterNamespaceObject := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: clusterNamespace,
+		},
+	}
+	if err := lcc.client.Delete(context.Background(), clusterNamespaceObject); err != nil {
+		return fmt.Errorf("[%s] Error deleting Cluster namespace while deleting cluster: %s",
+			clusterNamespace, err)
+	}
+
 	return nil
 }

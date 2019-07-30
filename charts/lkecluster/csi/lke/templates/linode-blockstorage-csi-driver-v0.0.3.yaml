@@ -297,7 +297,7 @@ spec:
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
-          imagePullPolicy: "Always"
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
@@ -309,12 +309,12 @@ spec:
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
-          imagePullPolicy: "Always"
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
         - name: linode-csi-plugin
-          image: linode/linode-blockstorage-csi-driver:v0.0.3
+          image: linode/linode-blockstorage-csi-driver:v0.1.3
           args :
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--token=$(LINODE_TOKEN)"
@@ -326,7 +326,10 @@ spec:
             - name: CSI_ENDPOINT
               value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
             - name: LINODE_API_URL
-              value: https://api.linode.com/v4
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: apiurl
             - name: LINODE_BS_PREFIX
               value:
             - name: NODE_NAME
@@ -338,13 +341,34 @@ spec:
                 secretKeyRef:
                   name: linode
                   key: token
-          imagePullPolicy: "Always"
+            # FOR DEV ONLY, TODO: use a kustomize patch
+            - name: LINODE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: apiurl
+            - name: LINODE_CA
+              value: /tls/cacert.pem
+            - name: LINODE_DEBUG
+              value: "1"
+            #end FOR DEV ONLY
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: socket-dir
               mountPath: /var/lib/csi/sockets/pluginproxy/
+            # FOR DEV ONLY, TODO: use a kustomize patch
+            - mountPath: /tls
+              name: cacert
+            #end FOR DEV ONLY
       volumes:
         - name: socket-dir
           emptyDir: {}
+        # FOR DEV ONLY, TODO: use a kustomize patch
+        - secret:
+            defaultMode: 420
+            secretName: linode-ca
+          name: cacert
+        #end FOR DEV ONLY
 ---
 # pkg/linode-bs/deploy/kubernetes/07-ds-csi-linode-node.yaml
 kind: DaemonSet
@@ -389,7 +413,7 @@ spec:
             - name: registration-dir
               mountPath: /registration/
         - name: csi-linode-plugin 
-          image: linode/linode-blockstorage-csi-driver:v0.0.3
+          image: linode/linode-blockstorage-csi-driver:v0.1.3
           args :
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--token=$(LINODE_TOKEN)"
@@ -399,8 +423,16 @@ spec:
           env:
             - name: CSI_ENDPOINT
               value: unix:///csi/csi.sock
+            # Needed for pre-prod environments
+            # Example: https://api.dev.linode.com/v4/
+            # This should match the value of LINODE_URL. One is respected by
+            # the CSI driver and one by linodego. We set both of them just in
+            # case we remove one or the other at some point.
             - name: LINODE_API_URL
-              value: https://api.linode.com/v4
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: apiurl
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
@@ -410,7 +442,18 @@ spec:
                 secretKeyRef:
                   name: linode
                   key: token
-          imagePullPolicy: "Always"
+            # Needed for pre-prod environments
+            # Example: https://api.dev.linode.com/v4/
+            - name: LINODE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: apiurl
+            - name: LINODE_CA
+              value: /tls/cacert.pem
+            - name: LINODE_DEBUG
+              value: "1"
+          imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
             capabilities:
@@ -426,6 +469,8 @@ spec:
               mountPropagation: "Bidirectional"
             - mountPath: /dev
               name: device-dir
+            - mountPath: /tls
+              name: cacert
       volumes:
         - name: registration-dir
           hostPath:
@@ -463,3 +508,11 @@ spec:
           hostPath:
             path: /sys
             type: Directory
+        # In production, load this secret with a dummy file under the "cacert: "
+        # key. We don't need it in prod but it makes this chart simpler by not
+        # needing template variables. Also, this sets us up to use kustomize in
+        # the future.
+        - secret:
+            defaultMode: 420
+            secretName: linode-ca
+          name: cacert

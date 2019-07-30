@@ -125,6 +125,9 @@ rules:
   resources:
   - secrets
   - events
+  - services
+  - configmaps
+  - namespaces
   verbs:
   - get
   - list
@@ -188,7 +191,7 @@ spec:
         - -logtostderr=true
         - -stderrthreshold=INFO
         image: linode-docker.artifactory.linode.com/asauber/cluster-api-provider-lke:v0.1.0
-        imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
         name: manager
         resources:
           limits:
@@ -202,6 +205,13 @@ spec:
           name: config
         - mountPath: /etc/ssl/certs
           name: certs
+        # Needed for pre-prod environments
+        # Example: https://api.dev.linode.com/v4/
+        - name: LINODE_URL
+          valueFrom:
+            secretKeyRef:
+              name: linode
+              key: apiurl
       serviceAccount: default
       terminationGracePeriodSeconds: 10
       tolerations:

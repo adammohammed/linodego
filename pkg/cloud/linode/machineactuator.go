@@ -47,11 +47,12 @@ const (
 )
 
 const (
-	createEventAction             = "Create"
-	deleteEventAction             = "Delete"
-	noEventAction                 = ""
-	linodeAPITokenSecretName      = "linode"
-	machineLinodeIDAnnotationName = "linode-id"
+	createEventAction                 = "Create"
+	deleteEventAction                 = "Delete"
+	noEventAction                     = ""
+	linodeAPITokenSecretName          = "linode"
+	machineLinodeIDAnnotationName     = "linode-id"
+	machineLinodeStatusAnnotationname = "linode-status"
 )
 
 var (
@@ -156,7 +157,7 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 
 	instance, err := lc.instanceIfExists(cluster, machine)
 	if err != nil {
-		return err
+		return fmt.Errorf("Couldn't test if Linode instance exists %v", err)
 	}
 
 	if instance == nil {
@@ -239,6 +240,9 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 
 		/* Annotate Machine object with Linode ID */
 		lc.AnnotateMachine(machine, machineLinodeIDAnnotationName, strconv.FormatInt(int64(instance.ID), 10))
+		/* Annotate Machine blindly with 'ready' status.
+		   TODO: Proxy the actual Kubernetes Node status */
+		lc.AnnotateMachine(machine, machineLinodeStatusAnnotationname, "ready")
 	} else {
 		glog.Infof("Skipped creating a VM that already exists.\n")
 	}
@@ -312,7 +316,7 @@ func (lc *LinodeClient) Delete(ctx context.Context, cluster *clusterv1.Cluster, 
 	err = linodeClient.DeleteInstance(context.Background(), linodeID)
 	if err != nil {
 
-		original_err, ok := err.(*linodego.Error)
+		originalErr, ok := err.(*linodego.Error)
 
 		/*
 		 * If a linode with the linodeIDStr ID dosn't exist, then we
@@ -320,7 +324,7 @@ func (lc *LinodeClient) Delete(ctx context.Context, cluster *clusterv1.Cluster, 
 		 * still need to delete the machine. Otherwise, we can get into
 		 * an infinite loop and won't be able to delete a machine.
 		 */
-		if ok && original_err.Code == 404 {
+		if ok && originalErr.Code == 404 {
 			glog.Infof("Linode with ID %s doesn't exist; Deleting machine anyway", linodeIDStr)
 			return nil
 		}
