@@ -137,7 +137,10 @@ spec:
         # The subdomain which hosts Object Storage
         # This is also the bucket name
         - name: STORAGE_CONTAINER
-          value: lke-etcd-backups
+          valueFrom:
+            secretKeyRef:
+              name: object-storage
+              key: bucket
         # The domain which hosts Object Storagee
         # Example: us-east-1.linodeobjects.com
         - name: OBJECT_STORAGE_ENDPOINT
