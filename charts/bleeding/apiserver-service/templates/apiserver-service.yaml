@@ -1,0 +1,19 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: kube-apiserver
+  namespace: kube-system-{{ .Release.Namespace }}
+  labels:
+    run: kube-apiserver
+  annotations:
+    lke.linode.com/caplke-version: "bleeding"
+    service.beta.kubernetes.io/linode-loadbalancer-protocol: "tcp"
+spec:
+  type: LoadBalancer
+  selector:
+    run: kube-apiserver
+  ports:
+    - name: https
+      protocol: TCP
+      port: 6443
+      targetPort: 6443

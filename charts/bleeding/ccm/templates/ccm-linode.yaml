@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ccm-linode
+  labels:
+    app: ccm-linode
+  annotations:
+    lke.linode.com/caplke-version: "bleeding"
+  namespace: kube-system-{{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ccm-linode
+  template:
+    metadata:
+      labels:
+        app: ccm-linode
+    spec:
+      tolerations:
+        # The CCM is a "critical addon"
+        - key: "CriticalAddonsOnly"
+          operator: "Exists"
+        # This taint is set on all Nodes when an external CCM is used
+        - key: node.cloudprovider.kubernetes.io/uninitialized
+          value: "true"
+          effect: NoSchedule
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoSchedule
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoSchedule
+      hostNetwork: false
+      containers:
+        - image: linode/linode-cloud-controller-manager:v0.2.3
+          imagePullPolicy: IfNotPresent
+          name: ccm-linode
+          args:
+          - --cloud-provider=linode
+          - --v=3
+          - --kubeconfig=/etc/kubernetes/admin.conf
+          volumeMounts:
+          - mountPath: /etc/kubernetes
+            name: k8s-admin
+          - mountPath: /tls
+            name: cacert
+          env:
+            - name: LINODE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: token
+            - name: LINODE_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: region
+            # Needed for pre-prod environments
+            # Example: https://api.dev.linode.com/v4/
+            - name: LINODE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: linode
+                  key: apiurl
+            - name: LINODE_CA
+              value: /tls/cacert.pem
+            - name: LINODE_DEBUG
+              value: "1"
+      volumes:
+      - name: k8s-admin
+        secret:
+          secretName: admin-kubeconfig
+      # In production, load this secret with a dummy file under the "cacert: "
+      # key. We don't need it in prod but it makes this chart simpler by not
+      # needing template variables. Also, this sets us up to use kustomize in
+      # the future.
+      - secret:
+          defaultMode: 420
+          secretName: linode-ca
+        name: cacert
