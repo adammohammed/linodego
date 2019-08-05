@@ -66,6 +66,7 @@ run-docker: fmt
 	docker run -e KUBECONFIG=/root/.kube/config \
 		--detach-keys "ctrl-z" \
 		-e RUNNING_EXTERNALLY=yes \
+		-e LINODE_URL=https://api.linode.com/v4/ \
 		-v $${KUBECONFIG}:/root/.kube/config \
 		-v ${ROOT_DIR}/run:/tmp/ \
 		"-ti" \
