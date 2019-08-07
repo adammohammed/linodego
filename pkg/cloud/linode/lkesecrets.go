@@ -563,11 +563,12 @@ func writeLinodeCASecrets(client client.Client, cluster *clusterv1.Cluster) erro
 // name corresponding to a bucket to store etcd backups in.
 func updateObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster) error {
 	name := "object-storage"
+	namespace := cluster.GetNamespace()
 
 	objectStorageSecret := &corev1.Secret{}
 	errGet := client.Get(
 		context.Background(),
-		types.NamespacedName{Namespace: cluster.GetNamespace(), Name: name},
+		types.NamespacedName{Namespace: namespace, Name: name},
 		objectStorageSecret,
 	)
 
@@ -588,6 +589,12 @@ func updateObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster)
 	endpointBytes, ok := objectStorageSecret.Data["endpoint"]
 	if !ok {
 		return fmt.Errorf("endpoint not found in object-storage secret")
+	}
+
+	bucketBytes, ok := objectStorageSecret.Data["bucket"]
+	if ok {
+		glog.Infof("[%s] bucket %s already exists for object-storage secret, not updating", namespace, string(bucketBytes))
+		return nil
 	}
 
 	bucketName, errCreateBucket := createObjectBucket(
