@@ -572,14 +572,14 @@ func updateObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster)
 		return errGet
 	}
 
-	accessKeyBytes, ok := objectStorageSecret.Data["access-key"]
+	accessKeyBytes, ok := objectStorageSecret.Data["access"]
 	if !ok {
-		return fmt.Errorf("access-key not found in object-storage secret")
+		return fmt.Errorf("access not found in object-storage secret")
 	}
 
-	secretKeyBytes, ok := objectStorageSecret.Data["secret-key"]
+	secretKeyBytes, ok := objectStorageSecret.Data["secret"]
 	if !ok {
-		return fmt.Errorf("secret-key not found in object-storage secret")
+		return fmt.Errorf("secret not found in object-storage secret")
 	}
 
 	endpointBytes, ok := objectStorageSecret.Data["endpoint"]
