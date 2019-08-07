@@ -42,4 +42,3 @@ data:
   access: $AWS_ACCESS_KEY_ID
   secret: $AWS_SECRET_ACCESS_KEY
   endpoint: $AWS_ENDPOINT
-  bucket: $AWS_BUCKET
