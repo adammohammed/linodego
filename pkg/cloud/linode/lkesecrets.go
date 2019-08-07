@@ -140,9 +140,8 @@ func createObjectBucket(accessKey, secretKey, endpoint, clusterName string) (str
 	})
 
 	var (
-		bucketConfig s3.CreateBucketInput
-		maxAttempts  int           = 10
-		delay        time.Duration = 100 * time.Millisecond
+		maxAttempts int           = 10
+		delay       time.Duration = 100 * time.Millisecond
 	)
 
 	// Attempt to create a unique bucket. If we get an error back, inspect it to see if the
@@ -152,6 +151,10 @@ func createObjectBucket(accessKey, secretKey, endpoint, clusterName string) (str
 		bucketName, errBucketName := generateObjectBucketName(clusterName)
 		if errBucketName != nil {
 			return "", errBucketName
+		}
+
+		bucketConfig := s3.CreateBucketInput{
+			Bucket: aws.String(bucketName),
 		}
 
 		_, errCreateBucket := svc.CreateBucket(&bucketConfig)
