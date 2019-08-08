@@ -43,7 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var awsSession = session.Must(session.NewSession())
+var objSession = session.Must(session.NewSession())
 
 // createSecret creates a secret with the given type in the given namespace.
 func createSecret(client client.Client,
@@ -133,13 +133,13 @@ func generateObjectBucketName(clusterName string) (string, error) {
 func createObjectBucket(accessKey, secretKey, endpoint, clusterName string) (string, error) {
 	creds := credentials.NewStaticCredentials(accessKey, secretKey, "")
 
-	svc := s3.New(awsSession, &aws.Config{
+	svc := s3.New(objSession, &aws.Config{
 		Region:      aws.String("us-east-1"),
 		Endpoint:    aws.String(endpoint),
 		Credentials: creds,
 	})
 
-	var (
+	const (
 		maxAttempts int           = 10
 		delay       time.Duration = 100 * time.Millisecond
 	)
