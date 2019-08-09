@@ -4,7 +4,7 @@ metadata:
   name: $MACHINE_NAME
   labels:
     set: node
-    pool-id: $POOL_ID
+    pool-id: "$POOL_ID"
   namespace: kube-system-$CLUSTER_NAME
 spec:
   providerSpec:
