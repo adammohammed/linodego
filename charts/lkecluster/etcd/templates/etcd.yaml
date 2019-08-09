@@ -166,6 +166,10 @@ spec:
         # Ignored with our modifications to this controller, but must be present
         - name: AWS_REGION
           value: us-east
+        # The CA to trust when communicating with Object Storage
+        # This is a static path, since it's mounted as a volume as shown below
+        - name: AWS_CA_BUNDLE
+          value: "/etc/linode/certs/cacert.pem"
         volumeMounts:
         - mountPath: /etc/kubernetes/pki/etcd
           name: etcd-certs
@@ -173,6 +177,8 @@ spec:
           name: k8s-certs
         - name: etcd-data
           mountPath: /var/etcd/data
+        - name: linode-ca
+          mountPath: /etc/linode/certs
       ## Only pods in kube-system can have this priorityClassName
       ## priorityClassName: system-cluster-critical
       imagePullSecrets:
@@ -181,6 +187,10 @@ spec:
       - name: etcd-certs
         secret:
           secretName: etcd-certs
+      # TODO[jschaeffer]: This should be a ConfigMap; there's nothing secret about a CA.
+      - name: linode-ca
+        secret:
+          secretName: linode-ca
       # TODO: Create a secret which has only a client cert for the backup-restore container
       - name: k8s-certs
         secret:
