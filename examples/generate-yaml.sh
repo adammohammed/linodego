@@ -5,7 +5,7 @@ set -o pipefail
 
 die() { echo "$*" 1>&2 ; exit 1; }
 
-USAGE="Usage: generate-yaml.sh -t linode-token -r linode-region -k pubkey -c cluster-name -a obj-access-key -s obj-secret-key -e obj-endpoint -m machine-name -p pool-id"
+USAGE="Usage: generate-yaml.sh -t linode-token -r linode-region -k pubkey-path -c cluster-name -a obj-access-key -s obj-secret-key -e obj-endpoint -m machine-name -p pool-id"
 NUM_ARGS=0
 REQUIRED_ARGS=9
 
