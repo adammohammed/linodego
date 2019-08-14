@@ -19,7 +19,7 @@ while (( "$#" )); do
             LINODE_REGION=$2
             shift 2
             ;;
-	-k|--public-key)
+        -k|--public-key)
             PUBLIC_KEY_PATH=$2
             shift 2
             ;;
