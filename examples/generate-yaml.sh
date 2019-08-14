@@ -6,6 +6,8 @@ set -o pipefail
 die() { echo "$*" 1>&2 ; exit 1; }
 
 USAGE="Usage: generate-yaml.sh -t linode-token -r linode-region -k pubkey -c cluster-name -a obj-access-key -s obj-secret-key -e obj-endpoint -m machine-name -p pool-id"
+NUM_ARGS=0
+REQUIRED_ARGS=9
 
 while (( "$#" )); do
     case "$1" in
@@ -53,10 +55,15 @@ while (( "$#" )); do
             die "$USAGE"
             ;;
     esac
+
+    # Update the number of args the user sent
+    NUM_ARGS="$(($NUM_ARGS + 1))"
 done
 
-[ -z "${LINODE_TOKEN}" ] && die "LINODE_TOKEN must be set to a Linode API token"
-[ -z "${LINODE_REGION}" ] && die "LINODE_REGION must be set to a Linode Region ID"
+if [ "$NUM_ARGS" -ne "$REQUIRED_ARGS" ]; then
+    echo "wrong number of arguments provided: expected $REQUIRED_ARGS, got $NUM_ARGS" 1>&2
+    die "$USAGE"
+fi
 
 PUBLIC_KEY=$(cat $PUBLIC_KEY_PATH)
 ENCODED_TOKEN=$(echo -n $LINODE_TOKEN | base64)
