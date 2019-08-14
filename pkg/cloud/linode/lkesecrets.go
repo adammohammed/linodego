@@ -26,7 +26,13 @@ import (
 	"os/exec"
 	"strings"
 	"text/template"
+	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/golang/glog"
 
 	"golang.org/x/net/context"
@@ -36,6 +42,8 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var objSession = session.Must(session.NewSession())
 
 // createSecret creates a secret with the given type in the given namespace.
 func createSecret(client client.Client,
@@ -101,6 +109,74 @@ func createOpaqueSecret(
 	finalizer string,
 ) error {
 	return createSecret(client, corev1.SecretTypeOpaque, namespace, name, data, overwrite, finalizer)
+}
+
+// generateObjectBucketName generates a bucket name of the form clusterName-rand where rand is a
+// 4-byte hexadecimal string.
+func generateObjectBucketName(clusterName string) (string, error) {
+	suffixBytes := make([]byte, 4)
+
+	if _, errRead := crand.Read(suffixBytes); errRead != nil {
+		return "", errRead
+	}
+
+	suffix := hex.EncodeToString(suffixBytes)
+
+	bucketName := fmt.Sprintf("%s-%s", clusterName, suffix)
+
+	return bucketName, nil
+}
+
+// createObjectBucket creates an Object Storage bucket based on the given cluster name. This
+// function will repeatedly attempt to create a bucket for the given user if one does not
+// exist, sleeping for 1 second between attempts. After 10 attempts, this function will fail.
+func createObjectBucket(accessKey, secretKey, endpoint, clusterName string) (string, error) {
+	creds := credentials.NewStaticCredentials(accessKey, secretKey, "")
+
+	svc := s3.New(objSession, &aws.Config{
+		Region:      aws.String("us-east-1"),
+		Endpoint:    aws.String(endpoint),
+		Credentials: creds,
+	})
+
+	const (
+		maxAttempts int           = 10
+		delay       time.Duration = 100 * time.Millisecond
+	)
+
+	// Attempt to create a unique bucket. If we get an error back, inspect it to see if the
+	// error indicates the bucket already exists and/or is owned by us. If it is, continue.
+	// Otherwise, return the error.
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		bucketName, errBucketName := generateObjectBucketName(clusterName)
+		if errBucketName != nil {
+			return "", errBucketName
+		}
+
+		bucketConfig := s3.CreateBucketInput{
+			Bucket: aws.String(bucketName),
+		}
+
+		_, errCreateBucket := svc.CreateBucket(&bucketConfig)
+		if errCreateBucket == nil {
+			return bucketName, nil
+		}
+
+		errAWS, ok := errCreateBucket.(awserr.Error)
+		if !ok {
+			return "", errCreateBucket
+		}
+
+		errorCode := errAWS.Code()
+		if errorCode != s3.ErrCodeBucketAlreadyExists &&
+			errorCode != s3.ErrCodeBucketAlreadyOwnedByYou {
+			return "", errCreateBucket
+		}
+
+		time.Sleep(delay)
+	}
+
+	return "", fmt.Errorf("failed to create a bucket after %d attempts", maxAttempts)
 }
 
 /* Temporarily holds PKI data for a cluster */
@@ -437,34 +513,6 @@ func generateNodeWatcherSecrets(client client.Client, cluster *clusterv1.Cluster
 }
 
 /*
- * create a secret containing credentials to access object storage
- *
- *     apiVersion: v1
- *     kind: Secret
- *     data:
- *       access: $access
- *       secret: $secret
- *       endpoint: $endpoint
- *     metadata:
- *       name: object-storage
- *       namespace: kube-system-$CLUSTER_NAME
- *
- */
-func writeObjectStorageSecrets(client client.Client, cluster *clusterv1.Cluster) error {
-
-	name := "object-storage"
-
-	objStorageSecret := &corev1.Secret{}
-	if err := client.Get(context.Background(),
-		types.NamespacedName{Namespace: "kube-system", Name: name},
-		objStorageSecret); err != nil {
-		return err
-	}
-
-	return createOpaqueSecret(client, cluster.GetNamespace(), name, objStorageSecret.Data, false, "")
-}
-
-/*
  * create a secret containing artifactory credentials
  *
  *   apiVersion: v1
@@ -511,6 +559,112 @@ func writeLinodeCASecrets(client client.Client, cluster *clusterv1.Cluster) erro
 	return createOpaqueSecret(client, cluster.GetNamespace(), name, data, false, ClusterFinalizer)
 }
 
+// writeObjectStorageSecret copies the object-storage secret from the kube-system namespace to the child
+// cluster's namespace, if a secret with the given name does not exist. If the object-storage secret
+// does exist, this function will have no effect.
+func writeObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster) error {
+	name := "object-storage"
+	var objStorageSecret corev1.Secret
+
+	errGet := client.Get(
+		context.Background(),
+		types.NamespacedName{Namespace: "kube-system", Name: name},
+		&objStorageSecret,
+	)
+	if errGet != nil {
+		return errGet
+	}
+
+	return createOpaqueSecret(client, cluster.GetNamespace(), name, objStorageSecret.Data, false, "")
+}
+
+// createObjectStorageBucketFromSecret gets the object-storage bucket from the child cluster's namespace
+// and attempts to create an object storage bucket scoped to the given access key and secret key in the
+// secret on the given endpoint in the secret. If a bucket key already exists in the object-storage secret,
+// this function will return that bucket key's value (i.e. the name of the bucket).
+func createObjectStorageBucketFromSecret(client client.Client, cluster *clusterv1.Cluster) (string, error) {
+	name := "object-storage"
+	namespace := cluster.GetNamespace()
+
+	objectStorageSecret := &corev1.Secret{}
+	errGet := client.Get(
+		context.Background(),
+		types.NamespacedName{Namespace: namespace, Name: name},
+		objectStorageSecret,
+	)
+
+	if errGet != nil {
+		return "", errGet
+	}
+
+	accessKeyBytes, ok := objectStorageSecret.Data["access"]
+	if !ok {
+		return "", fmt.Errorf("access not found in object-storage secret")
+	}
+
+	secretKeyBytes, ok := objectStorageSecret.Data["secret"]
+	if !ok {
+		return "", fmt.Errorf("secret not found in object-storage secret")
+	}
+
+	endpointBytes, ok := objectStorageSecret.Data["endpoint"]
+	if !ok {
+		return "", fmt.Errorf("endpoint not found in object-storage secret")
+	}
+
+	bucketBytes, ok := objectStorageSecret.Data["bucket"]
+	if ok {
+		glog.Infof(
+			"[%s] bucket %s already exists for object-storage secret, not creating a bucket",
+			namespace,
+			string(bucketBytes),
+		)
+		return string(bucketBytes), nil
+	}
+
+	bucketName, errCreateBucket := createObjectBucket(
+		string(accessKeyBytes),
+		string(secretKeyBytes),
+		string(endpointBytes),
+		cluster.Name,
+	)
+
+	return bucketName, errCreateBucket
+}
+
+// updateObjectStorageSecret updates the child cluster's object-storage secret to contain a bucket name
+// corresponding to a bucket to store etcd backups in. If the bucket name matches the current value of
+// the bucket key in the object-storage secret, this function will have no effect.
+func updateObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster, bucketName string) error {
+	name := "object-storage"
+	namespace := cluster.GetNamespace()
+
+	objectStorageSecret := &corev1.Secret{}
+	errGet := client.Get(
+		context.Background(),
+		types.NamespacedName{Namespace: namespace, Name: name},
+		objectStorageSecret,
+	)
+	if errGet != nil {
+		return errGet
+	}
+
+	// No need to check for the presence of the key here, since if bucket DNE bucketBytes will be nil.
+	bucketBytes := objectStorageSecret.Data["bucket"]
+	if string(bucketBytes) == bucketName {
+		glog.Infof(
+			"[%s] bucket %s matches current bucket value in object-storage secret, not updating",
+			namespace,
+			bucketName,
+		)
+		return nil
+	}
+
+	objectStorageSecret.Data["bucket"] = []byte(bucketName)
+
+	return createOpaqueSecret(client, cluster.GetNamespace(), name, objectStorageSecret.Data, true, "")
+}
+
 /*
  * Update the 'linode' secret with the current environment's Linode API URL
  */
@@ -551,14 +705,29 @@ func (lcc *LinodeClusterClient) generateSecrets(cluster *clusterv1.Cluster) erro
 		return err
 	}
 
-	if err := writeObjectStorageSecrets(lcc.client, cluster); err != nil {
-		glog.Errorf("[%s] Error writing ObjectStorage secrets for cluster: %v", clusterNamespace, err)
-		return err
-	}
-
 	if err := writeContainerRegistrySecrets(lcc.client, cluster); err != nil {
 		glog.Errorf("[%s] Error writing ContainerRegistry secrets for cluster: %v", clusterNamespace, err)
 		return err
+	}
+
+	if err := writeObjectStorageSecret(lcc.client, cluster); err != nil {
+		glog.Errorf("[%s] Error writing Object Storage secret for cluster: %v", clusterNamespace, err)
+		return err
+	}
+
+	bucketName, errCreateBucket := createObjectStorageBucketFromSecret(lcc.client, cluster)
+	if errCreateBucket != nil {
+		glog.Errorf(
+			"[%s] Error creating Object Storage bucket from secret for cluster: %v",
+			clusterNamespace,
+			errCreateBucket,
+		)
+
+		return errCreateBucket
+	}
+
+	if err := updateObjectStorageSecret(lcc.client, cluster, bucketName); err != nil {
+		glog.Errorf("[%s] Error updating Object Storage secret for cluster: %v", clusterNamespace, err)
 	}
 
 	if err := updateLinodeSecrets(lcc.client, clusterNamespace); err != nil {

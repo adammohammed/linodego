@@ -7,6 +7,7 @@ require (
 	github.com/Masterminds/semver v1.4.2 // indirect
 	github.com/Masterminds/sprig v2.17.1+incompatible // indirect
 	github.com/aokoli/goutils v1.1.0 // indirect
+	github.com/aws/aws-sdk-go v1.22.0
 	github.com/cyphar/filepath-securejoin v0.2.2 // indirect
 	github.com/dnaeon/go-vcr v1.0.1 // indirect
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
