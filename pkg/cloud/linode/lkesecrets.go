@@ -716,7 +716,8 @@ func updateLinodeSecrets(client client.Client, clusterNamespace string, secretsC
 	return client.Update(context.Background(), linodeSecret)
 }
 
-// SecretsCache is used to store recently requested secrets for the sake of chart dependency resolution
+// SecretsCache holds the latest retrieved version of each secret for the sake of dependency
+// resolution
 type SecretsCache = map[string]map[string][]byte
 
 /*
@@ -728,7 +729,11 @@ type SecretsCache = map[string]map[string][]byte
  *
  * The above secrets are written via the chart configs by clusteractuator.go
  */
-func (lcc *LinodeClusterClient) reconcileSecrets(cluster *clusterv1.Cluster, version Version, chartSet *ChartSet) (SecretsCache, error) {
+func (lcc *LinodeClusterClient) reconcileSecrets(
+	cluster *clusterv1.Cluster,
+	clusterVersion ClusterVersion,
+	chartSet *ChartSet,
+) (SecretsCache, error) {
 	glog.Infof("Creating secrets for cluster %v.", cluster.Name)
 	clusterNamespace := cluster.GetNamespace()
 

@@ -40,7 +40,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-const chartPath = "charts"
+const (
+	// BleedingEdge is the name for the latest set of child cluster charts.
+	// Only intended to be used during development.
+	BleedingEdge = "bleeding"
+
+	chartPath                = "charts"
+	clusterVersionAnnotation = "lke.linode.com/caplke-version"
+)
 
 type LinodeClusterClient struct {
 	client        client.Client
@@ -62,96 +69,123 @@ func NewClusterActuator(m manager.Manager, params ClusterActuatorParams) (*Linod
 	}, nil
 }
 
-type Version struct {
+// ClusterVersion is a child cluster version string of the form vX.Y.Z-NNN
+// For example: 1.14.5-001
+type ClusterVersion struct {
 	s string
 }
 
-func (v Version) String() string {
+func (v ClusterVersion) String() string {
 	return v.s
 }
 
-func (v Version) K8S() string {
-	if v.s == "bleeding" {
-		return "v1.13"
+// K8S returns the Kubernetes version portion of a ClusterVersion
+// For example: v1.14.5
+func (v ClusterVersion) K8S() string {
+	if v.s == BleedingEdge {
+		return BleedingEdge
 	}
 	return strings.Split(v.s, "-")[0]
 }
 
-func (v Version) Caplke() string {
+// Caplke returns our revision portion of a ClusterVersion
+// For example: 001
+func (v ClusterVersion) Caplke() string {
 	if v.s == "bleeding" {
 		return v.s
 	}
 	return strings.Split(v.s, "-")[1]
 }
 
-func getVersion(cluster *clusterv1.Cluster) (Version, error) {
-	version_key := "lke.linode.com/caplke-version"
-	version_str := cluster.ObjectMeta.Annotations[version_key]
-	if len(version_str) == 0 {
-		return Version{}, fmt.Errorf("[] empty annotation: %s", version_key)
+// getVersion looks for a version annotation on a Cluster object and returns a ClusterVersion
+func getVersion(cluster *clusterv1.Cluster) (ClusterVersion, error) {
+	versionStr := cluster.ObjectMeta.Annotations[clusterVersionAnnotation]
+
+	// If the version annotation is not present, then use BleedingEdge
+	if len(versionStr) == 0 {
+		return ClusterVersion{s: BleedingEdge}, nil
 	}
 
-	// XXX: if version is given without the caplke extention we should update it with (the latest) one
-
-	return Version{s: version_str}, nil
+	return ClusterVersion{s: versionStr}, nil
 }
 
+// SecretDesc is a description of a required secret for a chart
+// Finalizer is an optional Kubernetes Finalizer to be placed on the Secret
 type SecretDesc struct {
 	Name      string
 	Type      string
 	Finalizer string
 }
 
+// Resource is a description of an arbitrary Kubernetes resource required for a chart
 type Resource struct {
 	Kind string
 	Name string
 }
 
+// ChartDescription is a description of an individual Kubernetes chart
+// It is unmarshalled from config files placed in each chart directory
 type ChartDescription struct {
+	// Unmarshalled from a config found in an individual chart directory
 	Resources       []Resource
 	SecrtesRequired []SecretDesc
 
-	// the following vars are private and filled by code
+	// Private and filled in by code
 	path string
 }
 
+// ChartSet is a set of charts that relates to a ClusterVersion.
+// Each ChartSet is populated by reading the charts directory.
 type ChartSet struct {
-	// the following values are unmarshalled from the config
+	// Unmarshalled from the config in the root of a charts directory
 	CpcCharts             []string
 	LkeCharts             []string
 	CpcSecrets            []SecretDesc
 	LkeSecrets            []SecretDesc
 	SecrtesRequiredFormat map[string][]string
 
-	// the following values are unmarshalled indirectly from chart configs
+	// Unmarshalled indirectly from chart configs related to the root config
 	chartDescriptions map[string]ChartDescription
 
-	// the following vars are private and filled by code
-	path    string
-	version Version // needed? I hope no
+	// Private and filled in by code
+	path           string
+	clusterVersion ClusterVersion
 }
 
-/*
- * Validate that LKE services are deployed and running with expected
- * configuration. If they are not, deploy or modify them.
- */
+// Reconcile validates that LKE services are deployed and running with the expected
+// configuration. If they're not, deploy or modify them to bring them to expected running state.
+// Also, time and log how long a reconcile takes to complete.
+func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
+
+	glog.V(3).Infof("[%v] reconciling", cluster.Name)
+	start := time.Now()
+
+	if err := lcc.reconcile(cluster); err != nil {
+		glog.V(3).Infof("[%v] reconcilation error [time spent %s]: %v", cluster.Name, time.Since(start), err)
+		return err
+	}
+
+	glog.V(3).Infof("[%v] reconcilation complete [time spent %s]", cluster.Name, time.Since(start))
+	return nil
+}
+
 func (lcc *LinodeClusterClient) reconcile(cluster *clusterv1.Cluster) error {
-	version, err := getVersion(cluster)
+	clusterVersion, err := getVersion(cluster)
 	if err != nil {
 		return err
 	}
 
-	chartSet, err := getChartSet(version)
+	chartSet, err := getChartSet(clusterVersion)
 	if err != nil {
 		return err
 	}
 
-	ip, err := lcc.getAPIServerIP(cluster, version)
+	ip, err := lcc.getAPIServerIP(cluster, clusterVersion)
 	if err != nil {
 		return err
 	}
 
-	secretsCache, err := lcc.reconcileSecrets(cluster, version, chartSet)
+	secretsCache, err := lcc.reconcileSecrets(cluster, clusterVersion, chartSet)
 	if err != nil {
 		return err
 	}
@@ -175,33 +209,17 @@ func (lcc *LinodeClusterClient) reconcile(cluster *clusterv1.Cluster) error {
 		return err
 	}
 
-	if err := lcc.reconcileAddonsAndConfigmaps(cluster, version, ip, lkeClient); err != nil {
+	if err := lcc.reconcileAddonsAndConfigmaps(cluster, clusterVersion, ip, lkeClient); err != nil {
 		return err
 	}
 
 	return nil
 }
-
-func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
-
-	glog.Infof("[%v] reconciling", cluster.Name)
-	start := time.Now()
-
-	if err := lcc.reconcile(cluster); err != nil {
-		glog.Infof("[%v] reconcilation error [time spent %s]: %v", cluster.Name, time.Since(start), err)
-		return err
-	}
-
-	glog.Infof("[%v] reconcilation complete [time spent %s]", cluster.Name, time.Since(start))
-	return nil
-}
-
-/////////////////////////////////////////////////////////////////////
 
 func (chartSet *ChartSet) checkResources(client client.Client, namespace string, chartDesc ChartDescription) (bool, error) {
 
 	// always apply bleeding stuff
-	if chartSet.version.Caplke() == "bleeding" {
+	if chartSet.clusterVersion.Caplke() == "bleeding" {
 		return false, nil
 	}
 
@@ -209,7 +227,7 @@ func (chartSet *ChartSet) checkResources(client client.Client, namespace string,
 	for _, r := range chartDesc.Resources {
 		if v, err := getResourceVersion(client, namespace, &r); err != nil {
 			return false, err
-		} else if v != chartSet.version.String() {
+		} else if v != chartSet.clusterVersion.String() {
 			return false, nil
 		}
 	}
@@ -228,10 +246,6 @@ func (chartSet *ChartSet) checkChartSecretRequirements(chart string, secretsCach
 			}
 		}
 	}
-	return nil
-}
-
-func (chartSet *ChartSet) Checks(version Version, secretsCache SecretsCache) error {
 	return nil
 }
 
@@ -428,12 +442,12 @@ func (chartSet *ChartSet) readChartDescriptions() error {
 	return nil
 }
 
-func getChartSet(version Version) (*ChartSet, error) {
+func getChartSet(clusterVersion ClusterVersion) (*ChartSet, error) {
 	// cache non-bleeding
 
 	var chartSet ChartSet
-	chartSet.path = fmt.Sprintf("%s/%s", chartPath, version)
-	chartSet.version = version
+	chartSet.path = fmt.Sprintf("%s/%s", chartPath, clusterVersion)
+	chartSet.clusterVersion = clusterVersion
 	chartSet.chartDescriptions = make(map[string]ChartDescription)
 
 	f, err := os.Open(chartSet.path + "/" + "config.json")
@@ -479,7 +493,7 @@ func getCpcChartValues(secretsCache SecretsCache, clusterName, ip string) map[st
 	}
 }
 
-func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Cluster, version Version) error {
+func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Cluster, clusterVersion ClusterVersion) error {
 	apiService := &corev1.Service{}
 	apiService.ObjectMeta = metav1.ObjectMeta{
 		Namespace: cluster.GetNamespace(),
@@ -488,7 +502,7 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 			"run": "kube-apiserver",
 		},
 		Annotations: map[string]string{
-			"lke.linode.com/caplke-version":                           version.String(),
+			"lke.linode.com/caplke-version":                           clusterVersion.String(),
 			"service.beta.kubernetes.io/linode-loadbalancer-protocol": "tcp",
 		},
 	}
@@ -505,17 +519,17 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 	return lcc.client.Create(context.Background(), apiService)
 }
 
-func (lcc *LinodeClusterClient) getAPIServerIP(cluster *clusterv1.Cluster, version Version) (string, error) {
+func (lcc *LinodeClusterClient) getAPIServerIP(cluster *clusterv1.Cluster, clusterVersion ClusterVersion) (string, error) {
 
 	/* If service doesn't exist then we will try to create it */
 	apiService := &corev1.Service{}
 	nn := types.NamespacedName{Namespace: cluster.GetNamespace(), Name: "kube-apiserver"}
 	if err := lcc.client.Get(context.Background(), nn, apiService); err != nil {
-		if err := lcc.reconcileAPIServerService(cluster, version); err != nil {
+		if err := lcc.reconcileAPIServerService(cluster, clusterVersion); err != nil {
 			return "", err
 		}
 	}
-	glog.Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiService.Name)
+	glog.v(3).Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiService.Name)
 	if len(apiService.Status.LoadBalancer.Ingress) < 1 {
 		return "", fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
 	}
@@ -549,12 +563,13 @@ func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster,
  *   $ka init phase upload-config kubeadm
  *   $ka init phase addon coredns --service-cidr 10.128.0.0/16
  */
-func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(cluster *clusterv1.Cluster, version Version, ip string, lkeClient client.Client) error {
+func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(
+	cluster *clusterv1.Cluster,
+	clusterVersion ClusterVersion,
+	ip string,
+	lkeClient client.Client,
+) error {
 	glog.Infof("Reconciling XXX resources for cluster %v.", cluster.Name)
-
-	if version.K8S() != "v1.13" {
-		return fmt.Errorf("[%v] version %s unsupported", cluster.Name, version)
-	}
 
 	if checkDaemonset(lkeClient, "kube-system", "kube-proxy") {
 		glog.Infof("Cluster %v already has reconcileAddonsAndConfigmaps", cluster.Name)
