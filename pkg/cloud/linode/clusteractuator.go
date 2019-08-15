@@ -47,7 +47,11 @@ import (
 const (
 	// BleedingEdge is the name for the latest set of child cluster charts.
 	// Only intended to be used during development.
-	BleedingEdge    = "bleeding"
+	BleedingEdge = "bleeding"
+
+	// BleedingEdgeK8S is a full Kubernets version string for the sake of bootstrapping
+	// the BleedingEdge child clusters using kubeadm.
+	// TODO: Read this from the BleedingEdge config, an environment variable, or argument.
 	BleedingEdgeK8S = "v1.14.5"
 
 	chartPath                = "charts"
@@ -96,7 +100,7 @@ func (v ClusterVersion) K8S() string {
 // Caplke returns our revision portion of a ClusterVersion
 // For example: 001
 func (v ClusterVersion) Caplke() string {
-	if v.s == "bleeding" {
+	if v.s == BleedingEdge {
 		return v.s
 	}
 	return strings.Split(v.s, "-")[1]
@@ -175,10 +179,13 @@ func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
 }
 
 func (lcc *LinodeClusterClient) reconcile(cluster *clusterv1.Cluster) error {
+	clusterNamespace := cluster.GetNamespace()
+
 	clusterVersion, err := getVersion(cluster)
 	if err != nil {
 		return err
 	}
+	glog.V(3).Infof("[%s] reconciling with version: %s", clusterNamespace, clusterVersion)
 
 	chartSet, err := getChartSet(clusterVersion)
 	if err != nil {
@@ -602,7 +609,7 @@ func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(
 	ip string,
 	lkeClient client.Client,
 ) error {
-	glog.Infof("Reconciling XXX resources for cluster %v.", cluster.Name)
+	glog.Infof("Reconciling Addon resources for cluster %v.", cluster.Name)
 
 	kubeadm_bin, err := getKubeadm(clusterVersion)
 	if err != nil {
