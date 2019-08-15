@@ -31,6 +31,12 @@ vet: generate
 fmt: vet
 	go fmt ./pkg/... ./cmd/...
 
+# Run the go linter against all files
+.PHONY: lint
+lint: fmt
+	golint ./pkg/... ./cmd/...
+
+
 # Generate manifests e.g. CRD, RBAC etc.
 .PHONY: manifests
 manifests: fmt
