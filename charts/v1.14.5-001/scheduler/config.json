@@ -1,0 +1,11 @@
+{
+    "resources": [
+        {
+            "kind": "deployment",
+            "name": "kube-scheduler"
+        }
+    ],
+    "SecrtesRequired": [
+        { "name": "scheduler-kubeconfig", "type": "opaque" }
+    ]
+}

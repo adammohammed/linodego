@@ -1,0 +1,139 @@
+# Child cluster controller-manager
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-controller-manager
+  namespace: kube-system-{{ .Values.ClusterName }}
+  labels:
+    app: kubernetes
+    role: controller-manager
+  annotations:
+    lke.linode.com/caplke-version: "v1.14.5-001"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: metrics
+    port: 10257
+    protocol: TCP
+  selector:
+    app: kubernetes
+    role: controller-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-controller-manager
+  namespace: kube-system-{{ .Values.ClusterName }}
+  labels:
+    lke.linode.com/role: controlplane
+    app: kubernetes
+    role: controller-manager
+  annotations:
+    lke.linode.com/caplke-version: "v1.14.5-001"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubernetes
+      role: controller-manager
+  template:
+    metadata:
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ""
+{{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+{{- end }}
+      creationTimestamp: null
+      labels:
+        app: kubernetes
+        role: controller-manager
+        component: kube-controller-manager
+        tier: control-plane
+      name: kube-controller-manager
+      namespace: kube-system-{{ .Values.ClusterName }}
+    spec:
+      containers:
+      - command:
+        - kube-controller-manager
+        - --address=127.0.0.1
+        - --port=0
+        - --cloud-provider=external
+        - --secure-port=10257
+        - --allocate-node-cidrs=true
+        - --cluster-cidr=10.2.0.0/16
+        - --cluster-signing-cert-file=/etc/{{ .Values.ClusterName }}/pki/ca.crt
+        - --cluster-signing-key-file=/etc/{{ .Values.ClusterName }}/pki/ca.key
+        - --controllers=*,bootstrapsigner,tokencleaner
+        - --kubeconfig=/etc/{{ .Values.ClusterName }}/controller-manager.conf
+        - --authentication-kubeconfig=/etc/{{ .Values.ClusterName }}/controller-manager.conf
+        - --authorization-kubeconfig=/etc/{{ .Values.ClusterName }}/controller-manager.conf
+        - --client-ca-file=/etc/{{ .Values.ClusterName }}/pki/ca.crt
+        - --requestheader-client-ca-file=/etc/{{ .Values.ClusterName }}/pki/front-proxy-ca.crt
+        - --leader-elect=true
+        - --node-cidr-mask-size=24
+        - --root-ca-file=/etc/{{ .Values.ClusterName }}/pki/ca.crt
+        - --service-account-private-key-file=/etc/{{ .Values.ClusterName }}/pki/sa.key
+        - --use-service-account-credentials=true
+        image: {{ index .Values "images" "kube-controller-manager" }}
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 8
+          # TODO: make this an HTTP health check with secure, random, credentials
+          tcpSocket:
+            port: 10257
+          initialDelaySeconds: 15
+          timeoutSeconds: 15
+        name: kube-controller-manager
+        resources:
+          requests:
+            cpu: 50m
+        volumeMounts:
+        - mountPath: /etc/{{ .Values.ClusterName }}/pki
+          name: k8s-certs
+          readOnly: true
+        - mountPath: /etc/ssl/certs
+          name: ca-certs
+          readOnly: true
+        - mountPath: /etc/{{ .Values.ClusterName }}
+          name: controller-manager-kubeconfig
+          readOnly: true
+        - mountPath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+          name: flexvolume-dir
+        - mountPath: /usr/share/ca-certificates
+          name: usr-share-ca-certificates
+          readOnly: true
+        - mountPath: /usr/local/share/ca-certificates
+          name: usr-local-share-ca-certificates
+          readOnly: true
+        - mountPath: /etc/ca-certificates
+          name: etc-ca-certificates
+          readOnly: true
+      volumes:
+      - name: k8s-certs
+        secret:
+          secretName: k8s-certs
+      - hostPath:
+          path: /usr/local/share/ca-certificates
+          type: DirectoryOrCreate
+        name: usr-local-share-ca-certificates
+      - hostPath:
+          path: /etc/ca-certificates
+          type: DirectoryOrCreate
+        name: etc-ca-certificates
+      - name: controller-manager-kubeconfig
+        secret:
+          secretName: controller-manager-kubeconfig
+      - hostPath:
+          path: /etc/ssl/certs
+          type: DirectoryOrCreate
+        name: ca-certs
+      - hostPath:
+          path: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+          type: DirectoryOrCreate
+        name: flexvolume-dir
+      - hostPath:
+          path: /usr/share/ca-certificates
+          type: DirectoryOrCreate
+        name: usr-share-ca-certificates
+status: {}

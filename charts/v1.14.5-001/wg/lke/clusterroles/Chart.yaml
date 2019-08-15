@@ -1,0 +1,4 @@
+apiVersion: v1
+description: LKE cluster WG controller Resources
+name: clusterroles
+version: 0.0.1
