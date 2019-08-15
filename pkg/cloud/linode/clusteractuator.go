@@ -20,6 +20,7 @@ package linode
 import (
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -31,6 +32,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -702,6 +705,14 @@ func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 		},
 	}
 	if err := lcc.client.Delete(context.Background(), clusterNamespaceObject); err != nil {
+		statusError, ok := err.(*k8sErrors.StatusError)
+		if ok && statusError.ErrStatus.Code == http.StatusConflict {
+			glog.Warningf(
+				"[%s] Conflict while deleting Cluster namespace. Allowing delete to continue",
+				clusterNamespace,
+			)
+			return nil
+		}
 		return fmt.Errorf("[%s] Error deleting Cluster namespace while deleting cluster: %s",
 			clusterNamespace, err)
 	}
