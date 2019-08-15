@@ -213,6 +213,7 @@ type kubeadmConfigParams struct {
 	ClusterName          string
 	CertsDir             string
 	KubeconfigDir        string
+	K8SVersion           string
 }
 
 const kubeadmConfigTemplate = `kind: ClusterConfiguration
@@ -246,7 +247,7 @@ etcd:
       - etcd
       - etcd.kube-system-{{ .ClusterName }}.svc.cluster.local
 imageRepository: k8s.gcr.io
-kubernetesVersion: v1.13.3
+kubernetesVersion: {{ .K8SVersion }}
 networking:
   dnsDomain: cluster.local
   podSubnet: 10.2.0.0/16
@@ -254,7 +255,7 @@ networking:
 scheduler: {}
 `
 
-func getKubeadmConfig(client client.Client, cluster *clusterv1.Cluster, dirname string) ([]byte, error) {
+func getKubeadmConfig(client client.Client, cluster *clusterv1.Cluster, clusterVersion ClusterVersion, dirname string) ([]byte, error) {
 	if len(cluster.Status.APIEndpoints) < 1 {
 		return nil, fmt.Errorf("No APIEndpoints while writing certs for cluster (LoadBalancer Service not provisioned?) %v", cluster.Name)
 	}
@@ -263,6 +264,7 @@ func getKubeadmConfig(client client.Client, cluster *clusterv1.Cluster, dirname 
 		NodeBalancerHostname: cluster.Status.APIEndpoints[0].Host,
 		ClusterName:          cluster.Name,
 		CertsDir:             dirname,
+		K8SVersion:           clusterVersion.K8S(),
 	}
 
 	tmpl, err := template.New("kubeadm-config").Parse(kubeadmConfigTemplate)
@@ -274,16 +276,15 @@ func getKubeadmConfig(client client.Client, cluster *clusterv1.Cluster, dirname 
 	if err := tmpl.Execute(&configBuf, configParams); err != nil {
 		return nil, err
 	}
-
 	return configBuf.Bytes(), nil
 }
 
-func createKubeadmFile(client client.Client, dirname string, cluster *clusterv1.Cluster) (string, error) {
+func createKubeadmFile(client client.Client, dirname string, cluster *clusterv1.Cluster, clusterVersion ClusterVersion) (string, error) {
 	filename := dirname + "/" + "kubeadm.conf"
 
 	fmt.Printf(filename)
 
-	if data, err := getKubeadmConfig(client, cluster, dirname); err != nil {
+	if data, err := getKubeadmConfig(client, cluster, clusterVersion, dirname); err != nil {
 		return "", err
 	} else if err := ioutil.WriteFile(filename, data, 0644); err != nil {
 		return "", err
@@ -298,16 +299,21 @@ func patchKubeconfig(path, address, port string) error {
 	return err
 }
 
-func generateCertsInit(client client.Client, cluster *clusterv1.Cluster) (*certsInit, error) {
+func generateCertsInit(client client.Client, cluster *clusterv1.Cluster, clusterVersion ClusterVersion) (*certsInit, error) {
 	dirname := "/tmp/" + cluster.Name + "/pki"
 	if err := os.MkdirAll(dirname, os.ModePerm); err != nil {
 		return nil, err
 	}
 
+	kubeadm_bin, err := getKubeadm(clusterVersion)
+	if err != nil {
+		return nil, fmt.Errorf("version %v is not supported: %v", clusterVersion, err)
+	}
+
 	// Generate PKI material with the `kubeadm init phase certs` command
-	if config, err := createKubeadmFile(client, dirname, cluster); err != nil {
+	if config, err := createKubeadmFile(client, dirname, cluster, clusterVersion); err != nil {
 		return nil, err
-	} else if _, err := run("kubeadm", "init", "phase", "certs", "all", "--config", config); err != nil {
+	} else if _, err := run(kubeadm_bin, "init", "phase", "certs", "all", "--config", config); err != nil {
 		return nil, err
 	}
 
@@ -316,7 +322,7 @@ func generateCertsInit(client client.Client, cluster *clusterv1.Cluster) (*certs
 	kubeconfigDir := dirname + "/kubeconfigs"
 
 	// Generate client kubeconfigs with the `kubeadm init phase kubeconfig` command
-	if _, err := run("kubeadm", "init", "phase", "kubeconfig", "all",
+	if _, err := run(kubeadm_bin, "init", "phase", "kubeconfig", "all",
 		"--kubeconfig-dir", kubeconfigDir,
 		"--cert-dir", dirname,
 		"--apiserver-advertise-address", cluster.Status.APIEndpoints[0].Host); err != nil {
@@ -388,8 +394,8 @@ func addKubeconfig(kubeconfigs map[string]map[string][]byte, secretName string, 
 	return nil
 }
 
-func generateCerts(client client.Client, cluster *clusterv1.Cluster) (map[string][]byte, map[string][]byte, map[string]map[string][]byte, error) {
-	init, err := generateCertsInit(client, cluster)
+func generateCerts(client client.Client, cluster *clusterv1.Cluster, clusterVersion ClusterVersion) (map[string][]byte, map[string][]byte, map[string]map[string][]byte, error) {
+	init, err := generateCertsInit(client, cluster, clusterVersion)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -481,7 +487,7 @@ func certSecretsExist(client client.Client, ns string, secretsCache SecretsCache
 	return true
 }
 
-func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster, secretsCache SecretsCache) error {
+func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster, secretsCache SecretsCache, clusterVersion ClusterVersion) error {
 
 	ns := cluster.GetNamespace()
 
@@ -490,7 +496,7 @@ func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster, secre
 		return nil
 	}
 
-	k8sCerts, etcdCerts, kubeconfigs, err := generateCerts(client, cluster)
+	k8sCerts, etcdCerts, kubeconfigs, err := generateCerts(client, cluster, clusterVersion)
 	if err != nil {
 		return err
 	}
@@ -740,7 +746,7 @@ func (lcc *LinodeClusterClient) reconcileSecrets(
 	secretsCache := map[string]map[string][]byte{}
 
 	// ClusterVersion based
-	if err := generateCertSecrets(lcc.client, cluster, secretsCache); err != nil {
+	if err := generateCertSecrets(lcc.client, cluster, secretsCache, clusterVersion); err != nil {
 		glog.Errorf("[%s] Error generating certs for cluster: %v", clusterNamespace, err)
 		return nil, err
 	}

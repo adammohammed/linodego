@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -46,7 +47,8 @@ import (
 const (
 	// BleedingEdge is the name for the latest set of child cluster charts.
 	// Only intended to be used during development.
-	BleedingEdge = "bleeding"
+	BleedingEdge    = "bleeding"
+	BleedingEdgeK8S = "v1.14.5"
 
 	chartPath                = "charts"
 	clusterVersionAnnotation = "lke.linode.com/caplke-version"
@@ -86,7 +88,7 @@ func (v ClusterVersion) String() string {
 // For example: v1.14.5
 func (v ClusterVersion) K8S() string {
 	if v.s == BleedingEdge {
-		return BleedingEdge
+		return BleedingEdgeK8S
 	}
 	return strings.Split(v.s, "-")[0]
 }
@@ -572,6 +574,15 @@ func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster,
 	return lcc.client.Status().Update(context.TODO(), cluster)
 }
 
+func getKubeadm(clusterVersion ClusterVersion) (string, error) {
+	kubeadm_name := "kubeadm-" + clusterVersion.K8S()
+	if kubeadm_bin, err := exec.LookPath(kubeadm_name); err != nil {
+		return "", fmt.Errorf("can't find %s binary: %v", kubeadm_name, err)
+	} else {
+		return kubeadm_bin, nil
+	}
+}
+
 /*
  * reconcileAddonsAndConfigmaps deploys kube-proxy and coredns addons, an
  * initial bootstrap token, kubeadm config, and some additional resources
@@ -591,6 +602,11 @@ func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(
 ) error {
 	glog.Infof("Reconciling XXX resources for cluster %v.", cluster.Name)
 
+	kubeadm_bin, err := getKubeadm(clusterVersion)
+	if err != nil {
+		return fmt.Errorf("version %v is not supported: %v", clusterVersion, err)
+	}
+
 	if checkDaemonset(lkeClient, "kube-system", "kube-proxy") {
 		glog.Infof("Cluster %v already has reconcileAddonsAndConfigmaps", cluster.Name)
 		return nil
@@ -602,19 +618,19 @@ func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(
 	}
 	defer os.Remove(kubeconfig)
 
-	if _, err := system("kubeadm --kubeconfig %s init phase bootstrap-token", kubeconfig); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase bootstrap-token", kubeadm_bin, kubeconfig); err != nil {
 		return err
 	}
 
-	if _, err := system("kubeadm --kubeconfig %s init phase addon kube-proxy --apiserver-advertise-address %s --pod-network-cidr 10.2.0.0/16", kubeconfig, ip); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase addon kube-proxy --apiserver-advertise-address %s --pod-network-cidr 10.2.0.0/16", kubeadm_bin, kubeconfig, ip); err != nil {
 		return err
 	}
 
-	if _, err := system("kubeadm --kubeconfig %s init phase upload-config kubeadm", kubeconfig); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase upload-config kubeadm", kubeadm_bin, kubeconfig); err != nil {
 		return err
 	}
 
-	if _, err := system("kubeadm --kubeconfig %s init phase addon coredns --service-cidr 10.128.0.0/16", kubeconfig); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase addon coredns --service-cidr 10.128.0.0/16", kubeadm_bin, kubeconfig); err != nil {
 		return err
 	}
 
