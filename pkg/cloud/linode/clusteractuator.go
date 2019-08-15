@@ -219,24 +219,34 @@ func (lcc *LinodeClusterClient) reconcile(cluster *clusterv1.Cluster) error {
 	return nil
 }
 
-func (chartSet *ChartSet) checkResources(client client.Client, namespace string, chartDesc ChartDescription) (bool, error) {
+// checkResources determines if a chart should be deployed (or redeployed)
+// the return value indicates whether or not the currently deployed resources are "up to date"
+func (chartSet *ChartSet) checkResources(
+	client client.Client,
+	namespace string,
+	chartDesc ChartDescription,
+) (upToDate bool, checkErr error) {
 
-	// always apply bleeding stuff
-	if chartSet.clusterVersion.Caplke() == "bleeding" {
-		return false, nil
+	// Always apply BleedingEdge resources
+	if chartSet.clusterVersion.Caplke() == BleedingEdge {
+		upToDate = false
+		return
 	}
 
 	// if any resource is outdated or can't be checked, then re-apply the chart
 	for _, r := range chartDesc.Resources {
 		if v, err := getResourceVersion(client, namespace, &r); err != nil {
-			return false, err
+			upToDate, checkErr = false, err
+			return
 		} else if v != chartSet.clusterVersion.String() {
-			return false, nil
+			upToDate, checkErr = false, err
+			return
 		}
 	}
 
 	// all resources are up-to-date
-	return true, nil
+	upToDate = true
+	return
 }
 
 func (chartSet *ChartSet) checkChartSecretRequirements(chart string, secretsCache SecretsCache) error {
@@ -340,11 +350,11 @@ func (chartSet *ChartSet) reconcileCPCChart(lcc *LinodeClusterClient, cluster *c
 	}
 
 	// Check if the chart should be deployed
-	uptodate, err := chartSet.checkResources(lcc.client, clusterNamespace(cluster.Name), chartDesc)
+	upToDate, err := chartSet.checkResources(lcc.client, clusterNamespace(cluster.Name), chartDesc)
 	if err != nil {
 		return err
 	}
-	if !uptodate {
+	if !upToDate {
 		// If it should, deploy it
 		if err := lcc.chartDeployer.DeployChart(chartDesc.path, cluster.Name, values); err != nil {
 			return err
