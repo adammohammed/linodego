@@ -614,12 +614,12 @@ func createObjectStorageBucketFromSecret(client client.Client, cluster *clusterv
 	namespace := cluster.GetNamespace()
 
 	if !checkSecret(client, namespace, name, secretsCache) {
-		return "", fmt.Errorf("[%s] Could not find object storage secret while generating bucket name")
+		return "", fmt.Errorf("[%s] Could not find object storage secret while generating bucket name", namespace)
 	}
 	// checkSecret has the side effect of updating the secretsCache
 	objectStorageSecret := secretsCache[name]
 
-	bucketBytes, ok := objectStorageSecret.Data["bucket"]
+	bucketBytes, ok := objectStorageSecret["bucket"]
 	if ok {
 		glog.Infof(
 			"[%s] bucket %s already exists for object-storage secret, not creating a bucket",
@@ -629,17 +629,17 @@ func createObjectStorageBucketFromSecret(client client.Client, cluster *clusterv
 		return string(bucketBytes), nil
 	}
 
-	accessKeyBytes, ok := objectStorageSecret.Data["access"]
+	accessKeyBytes, ok := objectStorageSecret["access"]
 	if !ok {
 		return "", fmt.Errorf("access not found in object-storage secret")
 	}
 
-	secretKeyBytes, ok := objectStorageSecret.Data["secret"]
+	secretKeyBytes, ok := objectStorageSecret["secret"]
 	if !ok {
 		return "", fmt.Errorf("secret not found in object-storage secret")
 	}
 
-	endpointBytes, ok := objectStorageSecret.Data["endpoint"]
+	endpointBytes, ok := objectStorageSecret["endpoint"]
 	if !ok {
 		return "", fmt.Errorf("endpoint not found in object-storage secret")
 	}
@@ -662,13 +662,13 @@ func updateObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster,
 	namespace := cluster.GetNamespace()
 
 	if !checkSecret(client, namespace, name, secretsCache) {
-		fmt.Errorf("[%s] Could not find object storage secret while updating the bucket name")
+		return fmt.Errorf("[%s] Could not find object storage secret while updating the bucket name", namespace)
 	}
 	// checkSecret has the side effect of updating the secretsCache
 	objectStorageSecret := secretsCache[name]
 
 	// No need to check for the presence of the key here, since if bucket DNE bucketBytes will be nil.
-	bucketBytes := objectStorageSecret.Data["bucket"]
+	bucketBytes := objectStorageSecret["bucket"]
 	if string(bucketBytes) == bucketName {
 		glog.Infof(
 			"[%s] bucket %s matches current bucket value in object-storage secret, not updating",
@@ -678,9 +678,9 @@ func updateObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster,
 		return nil
 	}
 
-	objectStorageSecret.Data["bucket"] = []byte(bucketName)
+	objectStorageSecret["bucket"] = []byte(bucketName)
 
-	return createOpaqueSecret(client, cluster.GetNamespace(), name, objectStorageSecret.Data, true, "")
+	return createOpaqueSecret(client, cluster.GetNamespace(), name, objectStorageSecret, true, "")
 }
 
 /*
