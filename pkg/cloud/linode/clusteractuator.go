@@ -330,17 +330,24 @@ func (chartSet *ChartSet) copyLkeSecret(client client.Client, secretDesc SecretD
 }
 
 func (chartSet *ChartSet) reconcileCPCChart(lcc *LinodeClusterClient, cluster *clusterv1.Cluster, chart string, values map[string]interface{}) error {
-	if chartDesc, ok := chartSet.chartDescriptions[chart]; !ok {
+
+	chartDesc, ok := chartSet.chartDescriptions[chart]
+	if !ok {
 		return fmt.Errorf("chart %s isn't listed in resources", chart)
-	} else {
-		if uptodate, err := chartSet.checkResources(lcc.client, clusterNamespace(cluster.Name), chartDesc); err != nil {
+	}
+
+	// Check if the chart should be deployed
+	uptodate, err := chartSet.checkResources(lcc.client, clusterNamespace(cluster.Name), chartDesc)
+	if err != nil {
+		return err
+	}
+	if !uptodate {
+		// If it should, deploy it
+		if err := lcc.chartDeployer.DeployChart(chartDesc.path, cluster.Name, values); err != nil {
 			return err
-		} else if !uptodate {
-			if err := lcc.chartDeployer.DeployChart(chartDesc.path, cluster.Name, values); err != nil {
-				return err
-			}
 		}
 	}
+
 	return nil
 }
 
@@ -529,7 +536,7 @@ func (lcc *LinodeClusterClient) getAPIServerIP(cluster *clusterv1.Cluster, clust
 			return "", err
 		}
 	}
-	glog.v(3).Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiService.Name)
+	glog.V(3).Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiService.Name)
 	if len(apiService.Status.LoadBalancer.Ingress) < 1 {
 		return "", fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
 	}
