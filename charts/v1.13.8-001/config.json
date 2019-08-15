@@ -1,0 +1,30 @@
+{
+    "cpcSecrets": [
+        { "name": "object-storage", "type": "opaque" },
+        { "name": "artifactory-creds", "type": "kubernetes.io/dockerconfigjson" },
+        { "name": "linode-ca", "type": "opaque", "finalizer": "lke.linode.com/cluster" }
+    ],
+    "cpcCharts": [
+        "etcd",
+        "apiserver",
+        "controller-manager",
+        "scheduler",
+        "ccm"
+    ],
+    "lkeSecrets": [
+        { "name": "linode", "type": "opaque" },
+        { "name": "linode-ca", "type": "opaque" }
+    ],
+    "lkeCharts": [
+        "kubelet-resources",
+        "cni",
+        "csi/lke",
+        "wg/lke/clusterroles"
+    ],
+    "SecrtesRequiredFormat": {
+        "linode": ["token", "region", "apiurl"],
+        "linode-ca": ["cacert.pem"],
+        "object-storage": ["endpoint", "bucket", "access", "secret"],
+        "artifactory-creds": [".dockerconfigjson"]
+    }
+}
