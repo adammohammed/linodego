@@ -240,6 +240,8 @@ func (chartSet *ChartSet) checkResources(
 		if v, err := getResourceVersion(client, namespace, &r); err != nil {
 			upToDate, checkErr = false, err
 			return
+		} else if v == TreatMeAsUptodate {
+			// we don't know how to read this resource, let's think that it is ok
 		} else if v != chartSet.clusterVersion.String() {
 			upToDate, checkErr = false, err
 			return

@@ -30,6 +30,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const TreatMeAsUptodate = "TreatMeAsUptodate"
+
 func getServiceMeta(client client.Client, namespace, name string) *metav1.ObjectMeta {
 	x := &corev1.Service{}
 	nn := types.NamespacedName{Namespace: namespace, Name: name}
@@ -183,13 +185,13 @@ func getResourceVersion(client client.Client, namespace string, r *Resource) (st
 	case "clusterrolebinding":
 		meta = getClusterrolebindingMeta(client, r.Name)
 	case "customresourcedefinition":
-		return "bleeding", nil
+		return TreatMeAsUptodate, nil
 	//	XXX meta = getCustomresourcedefinitionMeta(client, r.Name)
 	case "csidriver":
-		return "bleeding", nil
+		return TreatMeAsUptodate, nil
 	//	XXX meta = getCsidriverMeta(client, r.Name)
 	case "storageclass":
-		return "bleeding", nil
+		return TreatMeAsUptodate, nil
 	//meta = XXX getStorageclassMeta(client, r.Name)
 	default:
 		return "", fmt.Errorf("can't get meta-information for resource kind %s", r.Kind)
