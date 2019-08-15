@@ -1,5 +1,7 @@
-# Image URL to use all building/pushing image targets
+# Image URL to use all building/pushing image targets, can be overridden by environment
 IMG ?= linode-docker.artifactory.linode.com/lke/cluster-api-provider-lke:canary
+# Linode API URL to be copied to a child cluster secret, can be overrideen by environment
+LINODE_URL ?= https://api.linode.com/v4/
 ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 REVISION = $(shell sh revision.sh)
 export GO111MODULE=on
@@ -28,6 +30,12 @@ vet: generate
 .PHONY: fmt
 fmt: vet
 	go fmt ./pkg/... ./cmd/...
+
+# Run the go linter against all files
+.PHONY: lint
+lint: fmt
+	golint ./pkg/... ./cmd/...
+
 
 # Generate manifests e.g. CRD, RBAC etc.
 .PHONY: manifests
@@ -66,6 +74,7 @@ run-docker: fmt
 	docker run -e KUBECONFIG=/root/.kube/config \
 		--detach-keys "ctrl-z" \
 		-e RUNNING_EXTERNALLY=yes \
+		-e LINODE_URL=${LINODE_URL} \
 		-v $${KUBECONFIG}:/root/.kube/config \
 		-v ${ROOT_DIR}/run:/tmp/ \
 		"-ti" \

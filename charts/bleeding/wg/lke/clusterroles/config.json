@@ -1,0 +1,12 @@
+{
+    "resources": [
+        {
+            "kind": "clusterrole",
+            "name": "nodes-watcher"
+        },
+        {
+            "kind": "clusterrolebinding",
+            "name": "watch-nodes"
+        }
+    ]
+}

@@ -1,0 +1,22 @@
+{
+    "resources": [
+        {
+            "kind": "deployment",
+            "name": "kube-apiserver"
+        },
+        {
+            "kind": "role",
+            "name": "wg-node-controller-role"
+        },
+        {
+            "kind": "rolebinding",
+            "name": "wg-node-controller-rolebinding"
+        }
+    ],
+    "SecrtesRequired": [
+        { "name": "artifactory-creds", "type": "kubernetes.io/dockerconfigjson" },
+        { "name": "etcd-certs", "type": "opaque" },
+        { "name": "k8s-certs", "type": "opaque" },
+        { "name": "wg-node-watcher-token", "type": "opaque" }
+    ]
+}

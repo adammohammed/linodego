@@ -1,0 +1,22 @@
+{
+    "resources": [
+        {
+            "kind": "configmap",
+            "name": "etcd-bootstrap"
+        },
+        {
+            "kind": "deployment",
+            "name": "etcd"
+        },
+        {
+            "kind": "service",
+            "name": "etcd"
+        }
+    ],
+    "SecrtesRequired": [
+        { "name": "object-storage", "type": "opaque" },
+        { "name": "etcd-certs", "type": "opaque" },
+        { "name": "k8s-certs", "type": "opaque" },
+        { "name": "artifactory-creds", "type": "kubernetes.io/dockerconfigjson" }
+    ]
+}

@@ -1,0 +1,16 @@
+{
+    "resources": [
+        {
+            "kind": "ConfigMap",
+            "name": "kubelet-config-1.14"
+        },
+        {
+            "kind": "Role",
+            "name": "kubeadm:kubelet-config-1.14"
+        },
+        {
+            "kind": "RoleBinding",
+            "name": "kubeadm:kubelet-config-1.14"
+        }
+    ]
+}

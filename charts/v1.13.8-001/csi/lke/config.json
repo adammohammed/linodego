@@ -1,0 +1,68 @@
+{
+    "resources": [
+        {
+            "kind": "serviceaccount",
+            "name": "csi-node-sa"
+        },
+        {
+            "kind": "serviceaccount",
+            "name": "csi-controller-sa"
+        },
+        {
+            "kind": "statefulset",
+            "name": "csi-linode-controller"
+        },
+        {
+            "kind": "daemonset",
+            "name": "csi-linode-node"
+        },
+        {
+            "kind": "customresourcedefinition",
+            "name": "csinodeinfos.csi.storage.k8s.io"
+        },
+        {
+            "kind": "customresourcedefinition",
+            "name": "csidrivers.csi.storage.k8s.io"
+        },
+        {
+            "kind": "clusterrole",
+            "name": "driver-registrar-role"
+        },
+        {
+            "kind": "clusterrolebinding",
+            "name": "driver-registrar-binding"
+        },
+        {
+            "kind": "clusterrole",
+            "name": "external-provisioner-role"
+        },
+        {
+            "kind": "clusterrolebinding",
+            "name": "csi-controller-provisioner-binding"
+        },
+        {
+            "kind": "clusterrole",
+            "name": "external-attacher-role"
+        },
+        {
+            "kind": "clusterrolebinding",
+            "name": "csi-controller-attacher-binding"
+        },
+        {
+            "kind": "clusterrole",
+            "name": "external-snapshotter-role"
+        },
+        {
+            "kind": "clusterrolebinding",
+            "name": "csi-controller-snapshotter-binding"
+        },
+        {
+            "kind": "csidriver",
+            "name": "linodebs.csi.linode.com"
+        },
+        {
+            "kind": "storageclass",
+            "name": "linode-block-storage"
+        }
+    ]
+}

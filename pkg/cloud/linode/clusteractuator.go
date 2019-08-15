@@ -1,5 +1,5 @@
 /*
-Copyright 2018 Linode, LLC.
+Copyright 2018-2019 Linode, LLC.
 Copyright 2018 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,14 +19,25 @@ package linode
 
 import (
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
+	"os/exec"
+	"strings"
+	"time"
+
+	"encoding/json"
 
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/clientcmd"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,27 +45,17 @@ import (
 )
 
 const (
-	chartPath                 = "charts"
-	lkeclusterPath            = chartPath + "/" + "lkecluster"
-	etcdChartPath             = lkeclusterPath + "/" + "etcd"
-	apiserverServiceChartPath = lkeclusterPath + "/" + "apiserver-service"
-	apiserverChartPath        = lkeclusterPath + "/" + "apiserver"
-	cmChartPath               = lkeclusterPath + "/" + "controller-manager"
-	schedChartPath            = lkeclusterPath + "/" + "scheduler"
+	// BleedingEdge is the name for the latest set of child cluster charts.
+	// Only intended to be used during development.
+	BleedingEdge = "bleeding"
 
-	kubeletResourcesPath = lkeclusterPath + "/" + "kubelet-resources"
-	cniResourcesPath     = lkeclusterPath + "/" + "cni"
-	ccmChartPath         = lkeclusterPath + "/" + "ccm"
+	// BleedingEdgeK8S is a full Kubernets version string for the sake of bootstrapping
+	// the BleedingEdge child clusters using kubeadm.
+	// TODO: Read this from the BleedingEdge config, an environment variable, or argument.
+	BleedingEdgeK8S = "v1.14.5"
 
-	csiResourcePath = lkeclusterPath + "/" + "csi/lke"
-
-	wgPath                 = lkeclusterPath + "/" + "wg"
-	wgLKECredsResourcePath = wgPath + "/" + "lke/clusterroles"
-
-	// ClusterFinalizer can be used on any cluster-related resource This name must
-	// include a '/'. See
-	// https://github.com/kubernetes/kubernetes/blob/v1.15.1/pkg/apis/core/validation/validation.go#L5072
-	ClusterFinalizer = "lke.linode.com/cluster"
+	chartPath                = "charts"
+	clusterVersionAnnotation = "lke.linode.com/caplke-version"
 )
 
 type LinodeClusterClient struct {
@@ -77,98 +78,493 @@ func NewClusterActuator(m manager.Manager, params ClusterActuatorParams) (*Linod
 	}, nil
 }
 
+// ClusterVersion is a child cluster version string of the form vX.Y.Z-NNN
+// For example: 1.14.5-001
+type ClusterVersion struct {
+	s string
+}
+
+func (v ClusterVersion) String() string {
+	return v.s
+}
+
+// K8S returns the Kubernetes version portion of a ClusterVersion
+// For example: v1.14.5
+func (v ClusterVersion) K8S() string {
+	if v.s == BleedingEdge {
+		return BleedingEdgeK8S
+	}
+	return strings.Split(v.s, "-")[0]
+}
+
+// Caplke returns our revision portion of a ClusterVersion
+// For example: 001
+func (v ClusterVersion) Caplke() string {
+	if v.s == BleedingEdge {
+		return v.s
+	}
+	return strings.Split(v.s, "-")[1]
+}
+
+// getVersion looks for a version annotation on a Cluster object and returns a ClusterVersion
+func getVersion(cluster *clusterv1.Cluster) (ClusterVersion, error) {
+	versionStr := cluster.ObjectMeta.Annotations[clusterVersionAnnotation]
+
+	// If the version annotation is not present, then use BleedingEdge
+	if len(versionStr) == 0 {
+		return ClusterVersion{s: BleedingEdge}, nil
+	}
+
+	return ClusterVersion{s: versionStr}, nil
+}
+
+// SecretDesc is a description of a required secret for a chart
+// Finalizer is an optional Kubernetes Finalizer to be placed on the Secret
+type SecretDesc struct {
+	Name      string
+	Type      string
+	Finalizer string
+}
+
+// Resource is a description of an arbitrary Kubernetes resource required for a chart
+type Resource struct {
+	Kind string
+	Name string
+}
+
+// ChartDescription is a description of an individual Kubernetes chart
+// It is unmarshalled from config files placed in each chart directory
+type ChartDescription struct {
+	// Unmarshalled from a config found in an individual chart directory
+	Resources       []Resource
+	SecrtesRequired []SecretDesc
+
+	// Private and filled in by code
+	path string
+}
+
+// ChartSet is a set of charts that relates to a ClusterVersion.
+// Each ChartSet is populated by reading the charts directory.
+type ChartSet struct {
+	// Unmarshalled from the config in the root of a charts directory
+	CpcCharts             []string
+	LkeCharts             []string
+	CpcSecrets            []SecretDesc
+	LkeSecrets            []SecretDesc
+	SecrtesRequiredFormat map[string][]string
+
+	// Unmarshalled indirectly from chart configs related to the root config
+	chartDescriptions map[string]ChartDescription
+
+	// Private and filled in by code
+	path           string
+	clusterVersion ClusterVersion
+}
+
+// Reconcile validates that LKE services are deployed and running with the expected
+// configuration. If they're not, deploy or modify them to bring them to expected running state.
+// Also, time and log how long a reconcile takes to complete.
 func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling cluster %v.", cluster.Name)
-	if err := lcc.reconcileControlPlane(cluster); err != nil {
+
+	glog.V(3).Infof("[%v] reconciling", cluster.Name)
+	start := time.Now()
+
+	if err := lcc.reconcile(cluster); err != nil {
+		glog.V(3).Infof("[%v] reconcilation error [time spent %s]: %v", cluster.Name, time.Since(start), err)
 		return err
 	}
+
+	glog.V(3).Infof("[%v] reconcilation complete [time spent %s]", cluster.Name, time.Since(start))
 	return nil
 }
 
-// Validate that control plane services are deployed and running with expected configuration
-// If they are not, deploy or modify them
-func (lcc *LinodeClusterClient) reconcileControlPlane(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling control plane for cluster %v.", cluster.Name)
+func (lcc *LinodeClusterClient) reconcile(cluster *clusterv1.Cluster) error {
+	clusterNamespace := cluster.GetNamespace()
 
-	ip, err := lcc.reconcileAPIServerService(cluster)
+	clusterVersion, err := getVersion(cluster)
+	if err != nil {
+		return err
+	}
+	glog.V(3).Infof("[%s] reconciling with version: %s", clusterNamespace, clusterVersion)
+
+	chartSet, err := getChartSet(clusterVersion)
 	if err != nil {
 		return err
 	}
 
-	if err := lcc.generateSecrets(cluster); err != nil {
+	ip, err := lcc.getAPIServerIP(cluster, clusterVersion)
+	if err != nil {
 		return err
 	}
 
-	if err := lcc.reconcileEtcd(cluster); err != nil {
+	secretsCache, err := lcc.reconcileSecrets(cluster, clusterVersion, chartSet)
+	if err != nil {
 		return err
 	}
 
-	if err := lcc.reconcileAPIServer(cluster, ip); err != nil {
+	values := getCpcChartValues(secretsCache, cluster.Name, ip)
+	if err := chartSet.reconcileCPC(lcc, cluster, secretsCache, values); err != nil {
 		return err
 	}
 
-	if err := lcc.reconcileControllerManager(cluster); err != nil {
+	lkeClient, err := lkeClientNew(lcc.client, cluster.Name)
+	if err != nil {
 		return err
 	}
 
-	if err := lcc.reconcileScheduler(cluster); err != nil {
+	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
+	if err != nil {
 		return err
 	}
 
-	if err := lcc.reconcileKubeletResources(cluster); err != nil {
+	if err := chartSet.reconcileLKE(lkeClient, chartDeployerLKE, secretsCache); err != nil {
 		return err
 	}
 
-	if err := lcc.reconcileAddonsAndConfigmaps(cluster, ip); err != nil {
-		return err
-	}
-
-	if err := lcc.reconcileCNI(cluster); err != nil {
-		return err
-	}
-
-	if err := lcc.reconcileCCM(cluster); err != nil {
-		return err
-	}
-
-	if err := lcc.reconcileCSI(cluster); err != nil {
-		return err
-	}
-
-	if err := lcc.reconcileWG(cluster); err != nil {
+	if err := lcc.reconcileAddonsAndConfigmaps(cluster, clusterVersion, ip, lkeClient); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Cluster) (string, error) {
-	glog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
-	// TODO: validate that API Server has an endpoint and return one if it does
+// checkResources determines if a chart should be deployed (or redeployed)
+// the return value indicates whether or not the currently deployed resources are "up to date"
+func (chartSet *ChartSet) checkResources(
+	client client.Client,
+	namespace string,
+	chartDesc ChartDescription,
+) (upToDate bool, checkErr error) {
 
-	// TODO: Use Ingress for this! Don't provision a NodeBalancer per LKE cluster
-	// Deploy a LoadBalancer service for the Cluster's API Server
-	values := map[string]interface{}{
-		"ClusterName": cluster.Name,
+	// Always apply BleedingEdge resources
+	if chartSet.clusterVersion.Caplke() == BleedingEdge {
+		upToDate = false
+		return
 	}
 
-	if err := lcc.chartDeployer.DeployChart(apiserverServiceChartPath, cluster.Name, values); err != nil {
-		return "", fmt.Errorf("Error reconciling apiserver service for cluster %v: %v", cluster.Name, err)
+	// if any resource is outdated or can't be checked, then re-apply the chart
+	for _, r := range chartDesc.Resources {
+		if v, err := getResourceVersion(client, namespace, &r); err != nil {
+			upToDate, checkErr = false, err
+			return
+		} else if v == TreatMeAsUptodate {
+			// we don't know how to read this resource, let's think that it is ok
+		} else if v != chartSet.clusterVersion.String() {
+			upToDate, checkErr = false, err
+			return
+		}
 	}
 
-	// Get the hostname or IP address of the LoadBalancer
-	apiserverService := &corev1.Service{}
-	err := lcc.client.Get(context.Background(),
-		types.NamespacedName{Namespace: cluster.GetNamespace(), Name: "kube-apiserver"},
-		apiserverService)
+	// all resources are up-to-date
+	upToDate = true
+	return
+}
+
+func (chartSet *ChartSet) checkChartSecretRequirements(chart string, secretsCache SecretsCache) error {
+	if desc, ok := chartSet.chartDescriptions[chart]; !ok {
+		return fmt.Errorf("chart %s wasn't found", chart)
+	} else /* ok */ {
+		for _, secretDesc := range desc.SecrtesRequired {
+			if _, ok := secretsCache[secretDesc.Name]; !ok {
+				return fmt.Errorf("chart %s requires %s secret which doesn't exist", chart, secretDesc.Name)
+			}
+		}
+	}
+	return nil
+}
+
+func (chartSet *ChartSet) validSecretFormat(secret *corev1.Secret) error {
+	name := secret.ObjectMeta.Name
+	if format, ok := chartSet.SecrtesRequiredFormat[name]; ok {
+		for _, item := range format {
+			if _, ok := secret.Data[item]; !ok {
+				return fmt.Errorf("secret %s should contain the %s data item", name, item)
+			}
+		}
+	}
+	return nil
+}
+
+func (chartSet *ChartSet) copyCPCSecret(client client.Client, ns string, secretDesc SecretDesc) (map[string][]byte, error) {
+	name := secretDesc.Name
+
+	// if this secret exists, then check that it has the right format
+	secret := &corev1.Secret{}
+	if err := client.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: name}, secret); err == nil {
+		if err := chartSet.validSecretFormat(secret); err != nil {
+			// try to delete invalid secret
+			if err := client.Delete(context.Background(), secret); err != nil {
+				return nil, err
+			}
+		} else {
+			// exists and valid
+			return secret.Data, nil
+		}
+	}
+
+	// get the parent secret
+	if err := client.Get(context.Background(), types.NamespacedName{Namespace: "kube-system", Name: name}, secret); err != nil {
+		return nil, fmt.Errorf("can't get parent secret %s: %v", name, err)
+	} else if err := chartSet.validSecretFormat(secret); err != nil {
+		return nil, fmt.Errorf("invalid parent secret %s: %v", name, err)
+	}
+
+	switch secretDesc.Type {
+	case "opaque":
+		return secret.Data, createOpaqueSecret(client, ns, name, secret.Data, false, secretDesc.Finalizer)
+	case "kubernetes.io/dockerconfigjson":
+		return secret.Data, createDockerSecret(client, ns, name, secret.Data, false, secretDesc.Finalizer)
+	default:
+		return nil, fmt.Errorf("unsupported secret type: %v", secretDesc.Type)
+	}
+}
+
+func (chartSet *ChartSet) copyLkeSecret(client client.Client, secretDesc SecretDesc, secretsCache SecretsCache) error {
+	name := secretDesc.Name
+
+	data := map[string][]byte{}
+	ok := false
+
+	if data, ok = secretsCache[name]; !ok {
+		return fmt.Errorf("can't find secret %s in cache", name)
+	}
+
+	// if this secret exists, then check that it has the right format
+	secret := &corev1.Secret{}
+	if err := client.Get(context.Background(), types.NamespacedName{Namespace: "kube-system", Name: name}, secret); err == nil {
+		if err := chartSet.validSecretFormat(secret); err != nil {
+			// try to delete invalid secret
+			if err := client.Delete(context.Background(), secret); err != nil {
+				return err
+			}
+		} else {
+			// exists and valid
+			return nil
+		}
+	}
+
+	switch secretDesc.Type {
+	case "opaque":
+		return createOpaqueSecret(client, "kube-system", name, data, false, "")
+	case "kubernetes.io/dockerconfigjson":
+		return createDockerSecret(client, "kube-system", name, data, false, "")
+	default:
+		return fmt.Errorf("unsupported secret type: %v", secretDesc.Type)
+	}
+}
+
+func (chartSet *ChartSet) reconcileCPCChart(lcc *LinodeClusterClient, cluster *clusterv1.Cluster, chart string, values map[string]interface{}) error {
+
+	chartDesc, ok := chartSet.chartDescriptions[chart]
+	if !ok {
+		return fmt.Errorf("chart %s isn't listed in resources", chart)
+	}
+
+	// Check if the chart should be deployed
+	upToDate, err := chartSet.checkResources(lcc.client, clusterNamespace(cluster.Name), chartDesc)
 	if err != nil {
-		return "", fmt.Errorf("Could not find kube-apiserver Service for cluster %v", cluster.Name)
+		return err
 	}
-	glog.Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiserverService.Name)
-	if len(apiserverService.Status.LoadBalancer.Ingress) < 1 {
+	if !upToDate {
+		// If it should, deploy it
+		if err := lcc.chartDeployer.DeployChart(chartDesc.path, cluster.Name, values); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (chartSet *ChartSet) reconcileCPC(lcc *LinodeClusterClient, cluster *clusterv1.Cluster, secretsCache SecretsCache, values map[string]interface{}) error {
+
+	ns := cluster.GetNamespace()
+
+	for _, secretDesc := range chartSet.CpcSecrets {
+		if secretData, err := chartSet.copyCPCSecret(lcc.client, ns, secretDesc); err != nil {
+			return fmt.Errorf("Error copying the %v secret to the LKE namespace: %v", secretDesc, err)
+		} else {
+			secretsCache[secretDesc.Name] = secretData
+		}
+	}
+
+	for _, chart := range chartSet.CpcCharts {
+		if err := chartSet.checkChartSecretRequirements(chart, secretsCache); err != nil {
+			return err
+		}
+	}
+
+	for _, chart := range chartSet.CpcCharts {
+		if err := chartSet.reconcileCPCChart(lcc, cluster, chart, values); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (chartSet *ChartSet) reconcileLKEChart(client client.Client, chartDeployer *ChartDeployer, chart string) error {
+	if chartDesc, ok := chartSet.chartDescriptions[chart]; !ok {
+		return fmt.Errorf("chart %s isn't listed in resources", chart)
+	} else {
+		if uptodate, err := chartSet.checkResources(client, "kube-system", chartDesc); err != nil {
+			return err
+		} else if !uptodate {
+			if err := chartDeployer.DeployChart(chartDesc.path, "kube-system", map[string]interface{}{}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (chartSet *ChartSet) reconcileLKE(client client.Client, chartDeployer *ChartDeployer, secretsCache SecretsCache) error {
+	for _, secretDesc := range chartSet.LkeSecrets {
+		if err := chartSet.copyLkeSecret(client, secretDesc, secretsCache); err != nil {
+			return fmt.Errorf("Error copying the %s secret to the LKE namespace: %v", secretDesc.Name, err)
+		}
+	}
+
+	// XXX: do we need to check that secret requirements are satisfied in LKE cluster?
+
+	for _, chart := range chartSet.LkeCharts {
+		if err := chartSet.reconcileLKEChart(client, chartDeployer, chart); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (chartSet *ChartSet) readChartDescription(chart string) (*ChartDescription, error) {
+
+	var desc ChartDescription
+	desc.path = fmt.Sprintf("%s/%s", chartSet.path, chart)
+
+	f, err := os.Open(desc.path + "/" + "config.json")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	b, err := ioutil.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(b, &desc); err != nil {
+		return nil, err
+	}
+
+	if len(desc.Resources) == 0 {
+		return nil, fmt.Errorf("chart %s: no resources found", chart)
+	}
+
+	return &desc, nil
+}
+
+func (chartSet *ChartSet) readChartDescriptions() error {
+	for _, chart := range append(chartSet.CpcCharts, chartSet.LkeCharts...) {
+		if desc, err := chartSet.readChartDescription(chart); err != nil {
+			return err
+		} else {
+			chartSet.chartDescriptions[chart] = *desc
+		}
+	}
+	return nil
+}
+
+func getChartSet(clusterVersion ClusterVersion) (*ChartSet, error) {
+	// cache non-bleeding
+
+	var chartSet ChartSet
+	chartSet.path = fmt.Sprintf("%s/%s", chartPath, clusterVersion)
+	chartSet.clusterVersion = clusterVersion
+	chartSet.chartDescriptions = make(map[string]ChartDescription)
+
+	f, err := os.Open(chartSet.path + "/" + "config.json")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	b, err := ioutil.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(b, &chartSet); err != nil {
+		return nil, err
+	}
+
+	if err := chartSet.readChartDescriptions(); err != nil {
+		return nil, err
+	}
+
+	return &chartSet, nil
+}
+
+func getCpcChartValues(secretsCache SecretsCache, clusterName, ip string) map[string]interface{} {
+
+	// all these values are to be removed, place all info in secrets and export as environment variables, if needed
+	linodeSecret := secretsCache["linode"]
+	return map[string]interface{}{
+		// StorePrefix example: us-east/cpc1190/12ahd312/lke123123 // XXX should go away
+		"StorePrefix": fmt.Sprintf("%s/cpc%s/%s/%s",
+			linodeSecret["region"],
+			linodeSecret["id"],
+			linodeSecret["timestamp"],
+			clusterName),
+		// XXX only three files use ClusterName, remove this dependency
+		//charts/bleeding/apiserver/templates/apiserver.yaml
+		//charts/bleeding/controller-manager/templates/controller-manager.yaml
+		//charts/bleeding/scheduler/templates/scheduler.yaml
+		"ClusterName": clusterName,
+		// XXX: only charts/bleeding/apiserver/templates/apiserver.yaml uses AdvertiseAddress
+		"AdvertiseAddress": ip,
+	}
+}
+
+func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Cluster, clusterVersion ClusterVersion) error {
+	apiService := &corev1.Service{}
+	apiService.ObjectMeta = metav1.ObjectMeta{
+		Namespace: cluster.GetNamespace(),
+		Name:      "kube-apiserver",
+		Labels: map[string]string{
+			"run": "kube-apiserver",
+		},
+		Annotations: map[string]string{
+			"lke.linode.com/caplke-version":                           clusterVersion.String(),
+			"service.beta.kubernetes.io/linode-loadbalancer-protocol": "tcp",
+		},
+	}
+	apiService.Spec = corev1.ServiceSpec{
+		Type:     corev1.ServiceTypeLoadBalancer,
+		Selector: map[string]string{"run": "kube-apiserver"},
+		Ports: []corev1.ServicePort{{
+			Name:       "https",
+			Protocol:   corev1.ProtocolTCP,
+			Port:       6443,
+			TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: 6443},
+		}},
+	}
+	return lcc.client.Create(context.Background(), apiService)
+}
+
+func (lcc *LinodeClusterClient) getAPIServerIP(cluster *clusterv1.Cluster, clusterVersion ClusterVersion) (string, error) {
+
+	/* If service doesn't exist then we will try to create it */
+	apiService := &corev1.Service{}
+	nn := types.NamespacedName{Namespace: cluster.GetNamespace(), Name: "kube-apiserver"}
+	if err := lcc.client.Get(context.Background(), nn, apiService); err != nil {
+		if err := lcc.reconcileAPIServerService(cluster, clusterVersion); err != nil {
+			return "", err
+		}
+	}
+	glog.V(3).Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiService.Name)
+	if len(apiService.Status.LoadBalancer.Ingress) < 1 {
 		return "", fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
 	}
-	ip := apiserverService.Status.LoadBalancer.Ingress[0].IP
+	ip := apiService.Status.LoadBalancer.Ingress[0].IP
 
 	// Write that NodeBalancer address as the cluster API endpoint
 	glog.Infof("External IP for kube-apiserver for cluster %v: %v", cluster.Name, ip)
@@ -187,104 +583,13 @@ func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster,
 	return lcc.client.Status().Update(context.TODO(), cluster)
 }
 
-func (lcc *LinodeClusterClient) reconcileAPIServer(cluster *clusterv1.Cluster, ip string) error {
-	glog.Infof("Reconciling API Server for cluster %v.", cluster.Name)
-	// TODO: validate that API Server is running for the cluster
-
-	// Deploy API Server for the LKE cluster
-	values := map[string]interface{}{
-		"ClusterName":      cluster.Name,
-		"AdvertiseAddress": ip,
+func getKubeadm(clusterVersion ClusterVersion) (string, error) {
+	kubeadm_name := "kubeadm-" + clusterVersion.K8S()
+	if kubeadm_bin, err := exec.LookPath(kubeadm_name); err != nil {
+		return "", fmt.Errorf("can't find %s binary: %v", kubeadm_name, err)
+	} else {
+		return kubeadm_bin, nil
 	}
-
-	if err := lcc.chartDeployer.DeployChart(apiserverChartPath, cluster.Name, values); err != nil {
-		glog.Errorf("Error reconciling apiserver for cluster %v: %v", cluster.Name, err)
-
-		return err
-	}
-
-	return nil
-}
-
-func (lcc *LinodeClusterClient) reconcileEtcd(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling etcd for cluster %v.", cluster.Name)
-	// TODO: validate that etcd is running for the cluster
-
-	secret := &corev1.Secret{}
-	name := types.NamespacedName{Namespace: "kube-system", Name: "linode"}
-	if err := lcc.client.Get(context.Background(), name, secret); err != nil {
-		return err
-	}
-
-	// Deploy etcd for the LKE cluster
-	values := map[string]interface{}{
-		// StorePrefix example: us-east/cpc1190/12ahd312/lke123123
-		"StorePrefix": fmt.Sprintf("%s/cpc%s/%s/%s",
-			secret.Data["region"],
-			secret.Data["id"],
-			secret.Data["timestamp"],
-			cluster.Name),
-	}
-	if err := lcc.chartDeployer.DeployChart(etcdChartPath, cluster.Name, values); err != nil {
-		glog.Errorf("Error reconciling etcd for cluster %v: %v", cluster.Name, err)
-		return err
-	}
-
-	return nil
-}
-
-func (lcc *LinodeClusterClient) reconcileControllerManager(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling kube-controller-manager for cluster %v.", cluster.Name)
-	// TODO: validate that kube-controller-manager is running for the cluster
-
-	// Deploy the controller-manager for the LKE cluster
-	values := map[string]interface{}{
-		"ClusterName": cluster.Name,
-	}
-
-	if err := lcc.chartDeployer.DeployChart(cmChartPath, cluster.Name, values); err != nil {
-		glog.Errorf("Error reconciling kube-controller-manager for cluster %v: %v", cluster.Name, err)
-
-		return err
-	}
-
-	return nil
-}
-
-func (lcc *LinodeClusterClient) reconcileScheduler(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling scheduler for cluster %v.", cluster.Name)
-	// TODO: validate that scheduler is running for the cluster
-	// Dont re-deploy the scheduler if we don't need to
-
-	// Deploy the scheduler for the LKE cluster
-	values := map[string]interface{}{
-		"ClusterName": cluster.Name,
-	}
-
-	if err := lcc.chartDeployer.DeployChart(schedChartPath, cluster.Name, values); err != nil {
-		glog.Errorf("Error reconciling scheduler for cluster %v: %v", cluster.Name, err)
-
-		return err
-	}
-
-	return nil
-}
-
-func (lcc *LinodeClusterClient) reconcileKubeletResources(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling kubelet resources for cluster %v.", cluster.Name)
-
-	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
-	if err != nil {
-		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
-		return err
-	}
-
-	if err := chartDeployerLKE.DeployChart(kubeletResourcesPath, "kube-system", map[string]interface{}{}); err != nil {
-		glog.Errorf("Error reconciling kubelet resources for cluster %v: %v", cluster.Name, err)
-		return err
-	}
-
-	return nil
 }
 
 /*
@@ -298,8 +603,23 @@ func (lcc *LinodeClusterClient) reconcileKubeletResources(cluster *clusterv1.Clu
  *   $ka init phase upload-config kubeadm
  *   $ka init phase addon coredns --service-cidr 10.128.0.0/16
  */
-func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(cluster *clusterv1.Cluster, ip string) error {
-	glog.Infof("Reconciling kubelet resources for cluster %v.", cluster.Name)
+func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(
+	cluster *clusterv1.Cluster,
+	clusterVersion ClusterVersion,
+	ip string,
+	lkeClient client.Client,
+) error {
+	glog.Infof("Reconciling Addon resources for cluster %v.", cluster.Name)
+
+	kubeadm_bin, err := getKubeadm(clusterVersion)
+	if err != nil {
+		return fmt.Errorf("version %v is not supported: %v", clusterVersion, err)
+	}
+
+	if checkDaemonset(lkeClient, "kube-system", "kube-proxy") {
+		glog.Infof("Cluster %v already has reconcileAddonsAndConfigmaps", cluster.Name)
+		return nil
+	}
 
 	kubeconfig, err := tempKubeconfig(lcc.client, cluster.Name)
 	if err != nil {
@@ -307,50 +627,19 @@ func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(cluster *clusterv1.
 	}
 	defer os.Remove(kubeconfig)
 
-	if _, err := system("kubeadm --kubeconfig %s init phase bootstrap-token", kubeconfig); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase bootstrap-token", kubeadm_bin, kubeconfig); err != nil {
 		return err
 	}
 
-	if _, err := system("kubeadm --kubeconfig %s init phase addon kube-proxy --apiserver-advertise-address %s --pod-network-cidr 10.2.0.0/16", kubeconfig, ip); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase addon kube-proxy --apiserver-advertise-address %s --pod-network-cidr 10.2.0.0/16", kubeadm_bin, kubeconfig, ip); err != nil {
 		return err
 	}
 
-	if _, err := system("kubeadm --kubeconfig %s init phase upload-config kubeadm", kubeconfig); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase upload-config kubeadm", kubeadm_bin, kubeconfig); err != nil {
 		return err
 	}
 
-	if _, err := system("kubeadm --kubeconfig %s init phase addon coredns --service-cidr 10.128.0.0/16", kubeconfig); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (lcc *LinodeClusterClient) reconcileCNI(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling CNI for cluster %v.", cluster.Name)
-
-	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
-	if err != nil {
-		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
-		return err
-	}
-
-	if err := chartDeployerLKE.DeployChart(cniResourcesPath, "kube-system", map[string]interface{}{}); err != nil {
-		glog.Errorf("Error reconciling CNI for cluster %v: %v", cluster.Name, err)
-		return err
-	}
-
-	return nil
-}
-
-func (lcc *LinodeClusterClient) reconcileCCM(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling CCM for cluster %v.", cluster.Name)
-
-	values := map[string]interface{}{}
-
-	if err := lcc.chartDeployer.DeployChart(ccmChartPath, cluster.Name, values); err != nil {
-		glog.Errorf("Error reconciling CCM for cluster %v: %v", cluster.Name, err)
-
+	if _, err := system("%s --kubeconfig %s init phase addon coredns --service-cidr 10.128.0.0/16", kubeadm_bin, kubeconfig); err != nil {
 		return err
 	}
 
@@ -369,85 +658,19 @@ func lkeClientNew(cpcClient client.Client, cluster string) (client.Client, error
 	if err != nil {
 		return nil, err
 	}
+
 	return client.New(config, client.Options{})
 }
 
-// copies the 'kube-system-<cluster>/linode' secret in CPC to the
-// 'kube-system/linode' secret in LKE cluster <cluster>
-func copySecretToChild(cpcClient, lkeClient client.Client, namespace string, secretName string) error {
-
-	secret := &corev1.Secret{}
-	if err := cpcClient.Get(context.Background(), types.NamespacedName{Namespace: namespace, Name: secretName}, secret); err != nil {
-		return err
+func checkDaemonset(client client.Client, ns, name string) bool {
+	daemonset := &appsv1.DaemonSet{}
+	nn := types.NamespacedName{Namespace: ns, Name: name}
+	if err := client.Get(context.Background(), nn, daemonset); err != nil {
+		return false
 	}
 
-	newSecret := &corev1.Secret{}
-	newSecret.ObjectMeta = metav1.ObjectMeta{
-		Namespace: "kube-system",
-		Name:      secretName,
-	}
-	if err := lkeClient.Get(context.Background(), types.NamespacedName{Namespace: "kube-system", Name: secretName}, newSecret); err == nil {
-		return nil
-	}
-
-	newSecret.Type = corev1.SecretTypeOpaque
-	newSecret.Data = secret.Data // note: not a deep copy
-	return lkeClient.Create(context.Background(), newSecret)
-}
-
-func (lcc *LinodeClusterClient) reconcileCSI(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling CSI for cluster %v.", cluster.Name)
-
-	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
-	if err != nil {
-		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
-		return err
-	}
-
-	lkeClient, err := lkeClientNew(lcc.client, cluster.Name)
-	if err != nil {
-		return err
-	}
-
-	// Copy linode secret from CPC to child cluster
-	if err := copySecretToChild(lcc.client, lkeClient, clusterNamespace(cluster.Name), "linode"); err != nil {
-		glog.Errorf("Error creating a linode secret in the LKE %v: %v", cluster.Name, err)
-		return err
-	}
-
-	// Copy the linode-ca secret from CPC to child cluster
-	if err := copySecretToChild(lcc.client, lkeClient, clusterNamespace(cluster.Name), "linode-ca"); err != nil {
-		glog.Errorf("Error copying the Linode CA cert to the LKE cluster %v: %v", cluster.Name, err)
-		return err
-	}
-
-	values := map[string]interface{}{}
-
-	if err := chartDeployerLKE.DeployChart(csiResourcePath, "kube-system", values); err != nil {
-		glog.Errorf("Error reconciling CSI for cluster %v: %v", cluster.Name, err)
-		return err
-	}
-
-	return nil
-}
-
-func (lcc *LinodeClusterClient) reconcileWG(cluster *clusterv1.Cluster) error {
-	glog.Infof("Reconciling WG controller for cluster %v.", cluster.Name)
-
-	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
-	if err != nil {
-		glog.Errorf("Error creating new chartDeployerLKE for cluster %v: %v", cluster.Name, err)
-		return err
-	}
-
-	values := map[string]interface{}{}
-
-	if err := chartDeployerLKE.DeployChart(wgLKECredsResourcePath, "kube-system", values); err != nil {
-		glog.Errorf("Error reconciling WG credentials for cluster %v: %v", cluster.Name, err)
-		return err
-	}
-
-	return nil
+	// simple: exists, then ok
+	return true
 }
 
 func (lcc *LinodeClusterClient) removeFinalizerFromSecret(clusterNamespace string, secretName string) error {
@@ -517,6 +740,14 @@ func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 		},
 	}
 	if err := lcc.client.Delete(context.Background(), clusterNamespaceObject); err != nil {
+		statusError, ok := err.(*k8sErrors.StatusError)
+		if ok && statusError.ErrStatus.Code == http.StatusConflict {
+			glog.Warningf(
+				"[%s] Conflict while deleting Cluster namespace. Allowing delete to continue",
+				clusterNamespace,
+			)
+			return nil
+		}
 		return fmt.Errorf("[%s] Error deleting Cluster namespace while deleting cluster: %s",
 			clusterNamespace, err)
 	}

@@ -1,0 +1,60 @@
+{
+    "resources": [
+        {
+            "kind": "CustomResourceDefinition",
+            "name": "felixconfigurations.crd.projectcalico.org"
+        },
+        {
+            "kind": "CustomResourceDefinition",
+            "name": "bgppeers.crd.projectcalico.org"
+        },
+        {
+            "kind": "CustomResourceDefinition",
+            "name": "bgpconfigurations.crd.projectcalico.org"
+        },
+        {
+            "kind": "CustomResourceDefinition",
+            "name": "ippools.crd.projectcalico.org"
+        },
+        {
+            "kind": "CustomResourceDefinition",
+            "name": "hostendpoints.crd.projectcalico.org"
+        },
+        {
+            "kind": "CustomResourceDefinition",
+            "name": "clusterinformations.crd.projectcalico.org"
+        },
+        {
+            "kind": "CustomResourceDefinition",
+            "name": "globalnetworkpolicies.crd.projectcalico.org"
+        },
+        {
+            "kind": "CustomResourceDefinition",
+            "name": "globalnetworksets.crd.projectcalico.org"
+        },
+        {
+            "kind": "CustomResourceDefinition",
+            "name": "networkpolicies.crd.projectcalico.org"
+        },
+        {
+            "kind": "ConfigMap",
+            "name": "calico-config"
+        },
+        {
+            "kind": "DaemonSet",
+            "name": "calico-node"
+        },
+        {
+            "kind": "ServiceAccount",
+            "name": "calico-node"
+        },
+        {
+            "kind": "ClusterRole",
+            "name": "calico-node"
+        },
+        {
+            "kind": "ClusterRoleBinding",
+            "name": "calico-node"
+        }
+    ]
+}

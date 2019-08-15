@@ -1,0 +1,226 @@
+# Child cluster etcd
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: etcd-bootstrap
+  namespace: kube-system-{{ .Release.Namespace }}
+  labels:
+    app: etcd
+  annotations:
+    lke.linode.com/caplke-version: "bleeding"
+data:
+  bootstrap.sh: |-
+    #!/bin/sh
+    while true;
+    do
+      wget http://localhost:8080/initialization/status -S -O status;
+      STATUS=`cat status`;
+      case $STATUS in
+      "New")
+            wget http://localhost:8080/initialization/start -S -O - ;;
+      "Progress")
+            sleep 5;
+            continue;;
+      "Failed")
+            continue;;
+      "Successful")
+            exec etcd \
+              --advertise-client-urls=https://etcd:2379 \
+              --trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt \
+              --cert-file=/etc/kubernetes/pki/etcd/server.crt \
+              --key-file=/etc/kubernetes/pki/etcd/server.key \
+              --client-cert-auth=true \
+              --auto-tls=false \
+              --peer-trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt \
+              --peer-cert-file=/etc/kubernetes/pki/etcd/peer.crt \
+              --peer-key-file=/etc/kubernetes/pki/etcd/peer.key \
+              --peer-client-cert-auth=true \
+              --peer-auto-tls=false \
+              --data-dir=/var/etcd/data/new.etcd \
+              --listen-client-urls=https://0.0.0.0:2379 \
+              --listen-peer-urls=https://0.0.0.0:2380 \
+              --initial-advertise-peer-urls=https://0.0.0.0:2380 \
+              --initial-cluster=lke-etcd-1=https://0.0.0.0:2380 \
+              --name=lke-etcd-1 \
+              --snapshot-count=75000 \
+              --quota-backend-bytes=8589934592 \
+              --enable-v2=false \
+              --initial-cluster-token=new \
+              --initial-cluster-state=new
+              # TODO: Restore these flags which were not present in etcd 3.2
+              # --auto-compaction-mode=periodic \
+              # --auto-compaction-retention=24
+            ;;
+      esac;
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: kube-system-{{ .Release.Namespace }}
+  name: etcd
+  labels:
+    app: etcd
+  annotations:
+    lke.linode.com/caplke-version: "bleeding"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: etcd
+  template:
+    metadata:
+      annotations:
+        # deprecated in 1.13
+        # scheduler.alpha.kubernetes.io/critical-pod: ""
+      creationTimestamp: null
+      labels:
+        component: etcd
+        tier: control-plane
+      name: etcd
+      namespace: kube-system-{{ .Release.Namespace }}
+    spec:
+      containers:
+      # etcd, the central datastore for each LKE cluster
+      - name: etcd
+        image: quay.io/coreos/etcd:v3.3.12
+        command:
+        - /bootstrap/bootstrap.sh
+        volumeMounts:
+        - mountPath: /var/etcd/data
+          name: etcd-data
+        - mountPath: /etc/kubernetes/pki/etcd
+          name: etcd-certs
+        - name: etcd-bootstrap
+          mountPath: /bootstrap
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -ec
+            - ETCDCTL_API=3 etcdctl --endpoints=https://localhost:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt
+              --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key
+              get foo
+          failureThreshold: 8
+          initialDelaySeconds: 15
+          timeoutSeconds: 15
+        resources: {}
+      # etcdbrctl, a sidecar which backs-up and restores etcd
+      - name: etcd-backup-restore-control
+        image: linode-docker.artifactory.linode.com/lke/etcdbrctl:0.6.0lke01
+        command:
+        - etcdbrctl
+        - server
+        # TODO: Tune the etcd backup schedule
+        - --schedule=* * * * *
+        # TODO; Tune the delta backup schedule
+        - --delta-snapshot-period-seconds=10
+        - --data-dir=/var/etcd/data/new.etcd
+        - --storage-provider=S3
+        # This is the S3 bucket name
+        - --store-prefix={{ .Values.StorePrefix }}
+        - --cert=/etc/kubernetes/pki/client/etcd/apiserver-etcd-client.crt
+        - --key=/etc/kubernetes/pki/client/etcd/apiserver-etcd-client.key
+        - --cacert=/etc/kubernetes/pki/etcd/ca.crt
+        - --insecure-transport=false
+        - --insecure-skip-tls-verify=false
+        - --endpoints=https://etcd:2379
+        - --etcd-connection-timeout=300
+        - --delta-snapshot-memory-limit=104857600 # 100MiB
+        - --garbage-collection-period-seconds=600
+        - --snapstore-temp-directory=/var/etcd/data/temp
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: server
+          protocol: TCP
+        resources: {}
+        env:
+        # The subdomain which hosts Object Storage
+        # This is also the bucket name
+        - name: STORAGE_CONTAINER
+          valueFrom:
+            secretKeyRef:
+              name: object-storage
+              key: bucket
+        # The domain which hosts Object Storagee
+        # Example: us-east-1.linodeobjects.com
+        - name: OBJECT_STORAGE_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: object-storage
+              key: endpoint
+        # The object storage Acess Key (s3 interface, legacy AWS name here)
+        # Example: 5PHIEDGHVCE8DX42D85M
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: object-storage
+              key: access
+        # The object storage Secret Key (se interface, legacy AWS name here)
+        # Example: WT3PCMP6VJZgpbSApea16IDqA0EsyKo7QbCvSeFD
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: object-storage
+              key: secret
+        # The Object Storage region
+        # Ignored with our modifications to this controller, but must be present
+        - name: AWS_REGION
+          value: us-east
+        # The CA to trust when communicating with Object Storage
+        # This is a static path, since it's mounted as a volume as shown below
+        - name: AWS_CA_BUNDLE
+          value: "/etc/linode/certs/cacert.pem"
+        volumeMounts:
+        - mountPath: /etc/kubernetes/pki/etcd
+          name: etcd-certs
+        - mountPath: /etc/kubernetes/pki/client/etcd
+          name: k8s-certs
+        - name: etcd-data
+          mountPath: /var/etcd/data
+        - name: linode-ca
+          mountPath: /etc/linode/certs
+      ## Only pods in kube-system can have this priorityClassName
+      ## priorityClassName: system-cluster-critical
+      imagePullSecrets:
+        - name: artifactory-creds
+      volumes:
+      - name: etcd-certs
+        secret:
+          secretName: etcd-certs
+      # TODO[jschaeffer]: This should be a ConfigMap; there's nothing secret about a CA.
+      - name: linode-ca
+        secret:
+          secretName: linode-ca
+      # TODO: Create a secret which has only a client cert for the backup-restore container
+      - name: k8s-certs
+        secret:
+          secretName: k8s-certs
+      # TODO: Don't store etcd data outside the container at all
+      - name: etcd-data
+        hostPath:
+          path: /var/lib/etcd/{{ .Release.Namespace }}
+          type: DirectoryOrCreate
+      - name: etcd-bootstrap
+        configMap:
+          name: etcd-bootstrap
+          defaultMode: 356
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: etcd
+  namespace: kube-system-{{ .Release.Namespace }}
+  annotations:
+    lke.linode.com/caplke-version: "bleeding"
+spec:
+  selector:
+    component: etcd
+  ports:
+  - protocol: TCP
+    port: 2379
+    targetPort: 2379
+apiVersion: v1

@@ -51,8 +51,9 @@ func (cd *ChartDeployer) DeployChart(chartPath, namespace string, values map[str
 	if err != nil {
 		return err
 	}
-	glog.Infof("We are deploying the following manifests")
-	glog.Infof("%v", renderedChart.Files)
+	glog.V(3).Infof("[%s] Deploying chart from path: %s", namespace, chartPath)
+	glog.V(4).Infof("[%s] Deploying the following manifest:", namespace)
+	glog.V(4).Infof("%v", renderedChart.Files)
 	return cd.client.Apply(renderedChart.Manifest())
 }
 

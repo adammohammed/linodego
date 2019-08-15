@@ -1,0 +1,13 @@
+{
+    "resources": [
+        {
+            "kind": "deployment",
+            "name": "ccm-linode"
+        }
+    ],
+    "SecrtesRequired": [
+        { "name": "linode", "type": "opaque" },
+        { "name": "linode-ca", "type": "opaque" },
+        { "name": "admin-kubeconfig", "type": "opaque" }
+    ]
+}

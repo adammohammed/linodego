@@ -1,0 +1,4 @@
+apiVersion: v1
+description: LKE cluster API Server
+name: apiserver
+version: 0.0.1

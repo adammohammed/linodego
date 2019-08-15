@@ -1,0 +1,16 @@
+{
+    "resources": [
+        {
+            "kind": "service",
+            "name": "kube-controller-manager"
+        },
+        {
+            "kind": "deployment",
+            "name": "kube-controller-manager"
+        }
+    ],
+    "SecrtesRequired": [
+        { "name": "k8s-certs", "type": "opaque" },
+        { "name": "controller-manager-kubeconfig", "type": "opaque" }
+    ]
+}
