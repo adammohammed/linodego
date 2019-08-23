@@ -23,6 +23,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -108,11 +110,147 @@ func (v ClusterVersion) Caplke() string {
 
 // getVersion looks for a version annotation on a Cluster object and returns a ClusterVersion
 func getVersion(cluster *clusterv1.Cluster) (ClusterVersion, error) {
+	s := cluster.ObjectMeta.Annotations[clusterVersionAnnotation]
+
+	// cluster reconciliation code will set version to v1.x.y-00z
+	if len(s) == 0 || s[0] != 'v' {
+		return ClusterVersion{}, fmt.Errorf("bad %s annotation: '%s'", clusterVersionAnnotation, s)
+	}
+
+	return ClusterVersion{s: s}, nil
+}
+
+func chartExists(versionString string) bool {
+	path := fmt.Sprintf("%s/%s", chartPath, versionString)
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
+}
+
+func findMaxPatch(k8s_major, k8s_minor int) (int, error) {
+	pattern := fmt.Sprintf("%s/v%d.%d*", chartPath, k8s_major, k8s_minor)
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return 0, err
+	}
+
+	max_patch := 0
+	for _, s := range matches {
+		// v<x>.<y>.<patch>-<caplke>
+		ss := strings.Split(s, ".")
+		if len(ss) != 3 {
+			return 0, fmt.Errorf("bad chart format found: %s", s)
+		}
+
+		// <patch>-<caplke>
+		sss := strings.Split(ss[2], "-")
+		if len(sss) != 2 {
+			return 0, fmt.Errorf("bad chart format found: %s", s)
+		}
+
+		patch, err := strconv.Atoi(sss[0])
+		if err != nil || patch <= 0 {
+			return 0, fmt.Errorf("bad chart format found: %s", s)
+		}
+
+		if patch > max_patch {
+			max_patch = patch
+		}
+	}
+
+	if max_patch == 0 {
+		return 0, fmt.Errorf("can't find any charts for version %d.%d", k8s_major, k8s_minor)
+	}
+	return max_patch, nil
+}
+
+func findChart(k8s_major, k8s_minor int) (string, error) {
+
+	patch, err := findMaxPatch(k8s_major, k8s_minor)
+	if err != nil {
+		return "", err
+	}
+
+	pattern := fmt.Sprintf("%s/v%d.%d.%d-*", chartPath, k8s_major, k8s_minor, patch)
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return "", err
+	}
+
+	max_caplke := 0
+	max_string := ""
+	for _, s := range matches {
+		// v<x>.<y>.<patch>-<caplke>
+		ss := strings.Split(s, ".")
+		if len(ss) != 3 {
+			return "", fmt.Errorf("bad chart format found: %s", s)
+		}
+
+		// <patch>-<caplke>
+		sss := strings.Split(ss[2], "-")
+		if len(sss) != 2 {
+			return "", fmt.Errorf("bad chart format found: %s", s)
+		}
+
+		caplke, err := strconv.Atoi(ss[1])
+		if err != nil || caplke <= 0 {
+			return "", fmt.Errorf("bad chart format found: %s", s)
+		}
+		if caplke > max_caplke {
+			max_caplke = caplke
+			max_string = s
+		}
+	}
+
+	if max_string == "" {
+		return "", fmt.Errorf("can't find any charts for version %d.%d", k8s_major, k8s_minor)
+	}
+
+	// only the last component
+	l := strings.Split(max_string, "/")
+	return l[len(l)-1], nil
+}
+
+func parseAPISuppliedVersion(versionStr string) (int, int, error) {
+	ss := strings.Split(versionStr, ".")
+	if len(ss) != 2 {
+		return 0, 0, fmt.Errorf("bad format, expected X.Y: %s", versionStr)
+	}
+
+	x, err := strconv.Atoi(ss[0])
+	if err != nil || x <= 0 {
+		return 0, 0, fmt.Errorf("bad format, expected <int>.<int>: %s", versionStr)
+	}
+
+	y, err := strconv.Atoi(ss[1])
+	if err != nil || y <= 0 {
+		return 0, 0, fmt.Errorf("bad format, expected <int>.<int>: %s", versionStr)
+	}
+
+	return x, y, nil
+}
+
+func (lcc *LinodeClusterClient) reconcileVersion(cluster *clusterv1.Cluster) (ClusterVersion, error) {
 	versionStr := cluster.ObjectMeta.Annotations[clusterVersionAnnotation]
 
-	// If the version annotation is not present, then use BleedingEdge
 	if len(versionStr) == 0 {
-		return ClusterVersion{s: BleedingEdge}, nil
+		return ClusterVersion{}, fmt.Errorf("cluster version annotation is empty")
+	}
+
+	if !chartExists(versionStr) {
+		k8s_major, k8s_minor, err := parseAPISuppliedVersion(versionStr)
+		if err != nil {
+			return ClusterVersion{}, fmt.Errorf("can't parse version string: '%s'", versionStr)
+		}
+
+		versionStr, err = findChart(k8s_major, k8s_minor)
+		if err != nil {
+			return ClusterVersion{}, fmt.Errorf("no suitable chart for k8s version %v.%v", k8s_major, k8s_minor)
+		}
+
+		cluster.ObjectMeta.Annotations[clusterVersionAnnotation] = versionStr
+		if err := lcc.client.Update(context.TODO(), cluster); err != nil {
+			return ClusterVersion{}, fmt.Errorf("failed to update cluster annotation")
+		}
 	}
 
 	return ClusterVersion{s: versionStr}, nil
@@ -181,7 +319,7 @@ func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
 func (lcc *LinodeClusterClient) reconcile(cluster *clusterv1.Cluster) error {
 	clusterNamespace := cluster.GetNamespace()
 
-	clusterVersion, err := getVersion(cluster)
+	clusterVersion, err := lcc.reconcileVersion(cluster)
 	if err != nil {
 		return err
 	}
