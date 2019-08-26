@@ -126,14 +126,14 @@ func chartExists(versionString string) bool {
 	return !os.IsNotExist(err)
 }
 
-func findMaxPatch(k8s_major, k8s_minor int) (int, error) {
-	pattern := fmt.Sprintf("%s/v%d.%d*", chartPath, k8s_major, k8s_minor)
+func findMaxPatch(k8sMajor, k8sMinor int) (int, error) {
+	pattern := fmt.Sprintf("%s/v%d.%d*", chartPath, k8sMajor, k8sMinor)
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return 0, err
 	}
 
-	max_patch := 0
+	maxPatch := 0
 	for _, s := range matches {
 		// v<x>.<y>.<patch>-<caplke>
 		ss := strings.Split(s, ".")
@@ -152,32 +152,32 @@ func findMaxPatch(k8s_major, k8s_minor int) (int, error) {
 			return 0, fmt.Errorf("bad chart format found: %s", s)
 		}
 
-		if patch > max_patch {
-			max_patch = patch
+		if patch > maxPatch {
+			maxPatch = patch
 		}
 	}
 
-	if max_patch == 0 {
-		return 0, fmt.Errorf("can't find any charts for version %d.%d", k8s_major, k8s_minor)
+	if maxPatch == 0 {
+		return 0, fmt.Errorf("can't find any charts for version %d.%d", k8sMajor, k8sMinor)
 	}
-	return max_patch, nil
+	return maxPatch, nil
 }
 
-func findChart(k8s_major, k8s_minor int) (string, error) {
+func findChart(k8sMajor, k8sMinor int) (string, error) {
 
-	patch, err := findMaxPatch(k8s_major, k8s_minor)
+	patch, err := findMaxPatch(k8sMajor, k8sMinor)
 	if err != nil {
 		return "", err
 	}
 
-	pattern := fmt.Sprintf("%s/v%d.%d.%d-*", chartPath, k8s_major, k8s_minor, patch)
+	pattern := fmt.Sprintf("%s/v%d.%d.%d-*", chartPath, k8sMajor, k8sMinor, patch)
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return "", err
 	}
 
-	max_caplke := 0
-	max_string := ""
+	maxCaplke := 0
+	maxString := ""
 	for _, s := range matches {
 		// v<x>.<y>.<patch>-<caplke>
 		ss := strings.Split(s, ".")
@@ -195,18 +195,18 @@ func findChart(k8s_major, k8s_minor int) (string, error) {
 		if err != nil || caplke <= 0 {
 			return "", fmt.Errorf("bad chart format found: %s", s)
 		}
-		if caplke > max_caplke {
-			max_caplke = caplke
-			max_string = s
+		if caplke > maxCaplke {
+			maxCaplke = caplke
+			maxString = s
 		}
 	}
 
-	if max_string == "" {
-		return "", fmt.Errorf("can't find any charts for version %d.%d", k8s_major, k8s_minor)
+	if maxString == "" {
+		return "", fmt.Errorf("can't find any charts for version %d.%d", k8sMajor, k8sMinor)
 	}
 
 	// only the last component
-	l := strings.Split(max_string, "/")
+	l := strings.Split(maxString, "/")
 	return l[len(l)-1], nil
 }
 
@@ -237,14 +237,14 @@ func (lcc *LinodeClusterClient) reconcileVersion(cluster *clusterv1.Cluster) (Cl
 	}
 
 	if !chartExists(versionStr) {
-		k8s_major, k8s_minor, err := parseAPISuppliedVersion(versionStr)
+		k8sMajor, k8sMinor, err := parseAPISuppliedVersion(versionStr)
 		if err != nil {
 			return ClusterVersion{}, fmt.Errorf("can't parse version string: '%s'", versionStr)
 		}
 
-		versionStr, err = findChart(k8s_major, k8s_minor)
+		versionStr, err = findChart(k8sMajor, k8sMinor)
 		if err != nil {
-			return ClusterVersion{}, fmt.Errorf("no suitable chart for k8s version %v.%v", k8s_major, k8s_minor)
+			return ClusterVersion{}, fmt.Errorf("no suitable chart for k8s version %v.%v", k8sMajor, k8sMinor)
 		}
 
 		cluster.ObjectMeta.Annotations[clusterVersionAnnotation] = versionStr
@@ -722,11 +722,11 @@ func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster,
 }
 
 func getKubeadm(clusterVersion ClusterVersion) (string, error) {
-	kubeadm_name := "kubeadm-" + clusterVersion.K8S()
-	if kubeadm_bin, err := exec.LookPath(kubeadm_name); err != nil {
-		return "", fmt.Errorf("can't find %s binary: %v", kubeadm_name, err)
+	kubeadmName := "kubeadm-" + clusterVersion.K8S()
+	if kubeadmBin, err := exec.LookPath(kubeadmName); err != nil {
+		return "", fmt.Errorf("can't find %s binary: %v", kubeadmName, err)
 	} else {
-		return kubeadm_bin, nil
+		return kubeadmBin, nil
 	}
 }
 
@@ -749,7 +749,7 @@ func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(
 ) error {
 	glog.Infof("Reconciling Addon resources for cluster %v.", cluster.Name)
 
-	kubeadm_bin, err := getKubeadm(clusterVersion)
+	kubeadmBin, err := getKubeadm(clusterVersion)
 	if err != nil {
 		return fmt.Errorf("version %v is not supported: %v", clusterVersion, err)
 	}
@@ -765,19 +765,19 @@ func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(
 	}
 	defer os.Remove(kubeconfig)
 
-	if _, err := system("%s --kubeconfig %s init phase bootstrap-token", kubeadm_bin, kubeconfig); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase bootstrap-token", kubeadmBin, kubeconfig); err != nil {
 		return err
 	}
 
-	if _, err := system("%s --kubeconfig %s init phase addon kube-proxy --apiserver-advertise-address %s --pod-network-cidr 10.2.0.0/16", kubeadm_bin, kubeconfig, ip); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase addon kube-proxy --apiserver-advertise-address %s --pod-network-cidr 10.2.0.0/16", kubeadmBin, kubeconfig, ip); err != nil {
 		return err
 	}
 
-	if _, err := system("%s --kubeconfig %s init phase upload-config kubeadm", kubeadm_bin, kubeconfig); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase upload-config kubeadm", kubeadmBin, kubeconfig); err != nil {
 		return err
 	}
 
-	if _, err := system("%s --kubeconfig %s init phase addon coredns --service-cidr 10.128.0.0/16", kubeadm_bin, kubeconfig); err != nil {
+	if _, err := system("%s --kubeconfig %s init phase addon coredns --service-cidr 10.128.0.0/16", kubeadmBin, kubeconfig); err != nil {
 		return err
 	}
 
