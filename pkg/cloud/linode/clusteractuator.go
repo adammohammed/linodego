@@ -234,6 +234,8 @@ func (lcc *LinodeClusterClient) reconcileVersion(cluster *clusterv1.Cluster) (Cl
 
 	if len(versionStr) == 0 {
 		return ClusterVersion{}, fmt.Errorf("cluster version annotation is empty")
+	} else if strings.Contains(versionStr, "/") {
+		return ClusterVersion{}, fmt.Errorf("cluster version annotation contains '/': %v", versionStr)
 	}
 
 	if !chartExists(versionStr) {
