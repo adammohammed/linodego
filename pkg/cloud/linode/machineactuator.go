@@ -137,9 +137,11 @@ func getLinodeAPIClient(client client.Client, cluster *clusterv1.Cluster) (*lino
 	return &linodeClient, strings.TrimSpace(string(region)), nil
 }
 
-func (lc *LinodeClient) validateMachine(machine *clusterv1.Machine, config *lkeconfigv1.LkeMachineProviderConfig) *apierrors.MachineError {
-	if machine.Spec.Versions.Kubelet == "" {
-		return apierrors.InvalidMachineConfiguration("spec.versions.kubelet can't be empty")
+func (lc *LinodeClient) setKubeletVersion(machine *clusterv1.Machine, cluster *clusterv1.Cluster) *apierrors.MachineError {
+	if version, err := getVersion(cluster); err != nil {
+		return apierrors.InvalidMachineConfiguration("cluster doesn't have a proper version")
+	} else {
+		machine.Spec.Versions.Kubelet = version.K8S()[1:] // strip the leading 'v' character
 	}
 	return nil
 }
@@ -166,7 +168,7 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 			return lc.handleMachineError(machine, apierrors.InvalidMachineConfiguration(
 				"Cannot unmarshal machine's providerConfig field: %v", err), createEventAction)
 		}
-		if verr := lc.validateMachine(machine, machineConfig); verr != nil {
+		if verr := lc.setKubeletVersion(machine, cluster); verr != nil {
 			return lc.handleMachineError(machine, verr, createEventAction)
 		}
 
