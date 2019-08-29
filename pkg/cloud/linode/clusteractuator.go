@@ -849,7 +849,7 @@ func revokeAPIToken(token string) error {
 	values := url.Values{}
 	values.Set("token", string(token))
 
-	expireURL := fmt.Sprintf("%s%s", string(linodeLoginURL), "/token/expire")
+	expireURL := fmt.Sprintf("%s%s", string(linodeLoginURL), "/oauth/token/expire")
 
 	resp, errPost := http.PostForm(expireURL, values)
 	if errPost != nil {
