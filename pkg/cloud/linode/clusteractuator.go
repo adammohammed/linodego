@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -813,23 +814,111 @@ func checkDaemonset(client client.Client, ns, name string) bool {
 	return true
 }
 
-func (lcc *LinodeClusterClient) removeFinalizerFromSecret(clusterNamespace string, secretName string) error {
-	// If there are no Machines, then we can remove the finalizers on the critical Secrets
-	// NB: Don't block deletion (yet) for this reason. (Don't return Error)
-	secret := &corev1.Secret{}
-	if err := lcc.client.Get(context.Background(),
-		types.NamespacedName{Namespace: clusterNamespace, Name: secretName},
-		secret); err != nil {
-		glog.Errorf("[%s] Could not get secret \"%s\" in order to remove finalizer. "+
-			"Continuing with Cluster delete anyway", clusterNamespace, secretName)
+func (lcc *LinodeClusterClient) getSecret(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
+	var secret corev1.Secret
+
+	namespacedName := types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}
+
+	if errGet := lcc.client.Get(ctx, namespacedName, &secret); errGet != nil {
+		glog.Errorf("[%s] Could not get secret \"%s\"", namespace, name)
+		return nil, errGet
+	}
+
+	return &secret, nil
+}
+
+func (lcc *LinodeClusterClient) removeFinalizerFromSecret(ctx context.Context, secret *corev1.Secret) error {
+	secret.Finalizers = []string{}
+	if err := lcc.client.Update(ctx, secret); err != nil {
+		glog.Errorf("[%s] Could not update secret \"%s\"", secret.ObjectMeta.Namespace, secret.ObjectMeta.Name)
+		return err
+	}
+
+	return nil
+}
+
+func revokeAPIToken(token string) error {
+	linodeLoginURL, ok := os.LookupEnv("LINODE_LOGIN_URL")
+	if !ok {
+		return fmt.Errorf("LINODE_LOGIN_URL has not been set in the environment")
+	}
+
+	values := url.Values{}
+	values.Set("token", string(token))
+
+	expireURL := fmt.Sprintf("%s%s", string(linodeLoginURL), "/oauth/token/expire")
+
+	resp, errPost := http.PostForm(expireURL, values)
+	if errPost != nil {
+		return errPost
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf(
+			"received unexpected HTTP response %d from %s",
+			resp.StatusCode,
+			expireURL,
+		)
+	}
+
+	return nil
+}
+
+// cleanUpLinodeSecret cleans up the "linode" secret by expiring the linode API token and removing
+// the finalizer for the secret.
+func (lcc *LinodeClusterClient) cleanUpLinodeSecret(ctx context.Context, namespace string) error {
+	secret, errSecret := lcc.getSecret(ctx, namespace, "linode")
+	if errSecret != nil {
+		return errSecret
+	}
+
+	// Attempt to get the token and revoke it. If we can't, keep going - the important thing is to
+	// make sure the cluster is deleted.
+	secretToken, ok := secret.Data["token"]
+	var errRevoke error
+	if !ok {
+		glog.Errorf(
+			"[%s] key \"token\" not found in secret \"%s\" - not revoking token",
+			namespace,
+			secret.Name,
+		)
+	} else {
+		errRevoke = revokeAPIToken(string(secretToken))
+	}
+
+	errRemoveFinalizer := lcc.removeFinalizerFromSecret(ctx, secret)
+
+	// Return an error based on whether one, both, or neither operations failed.
+	switch {
+	case errRevoke != nil && errRemoveFinalizer != nil:
+		return fmt.Errorf(
+			"multiple errors on cleanup of secret \"%s\": %s, %s",
+			secret.Name,
+			errRevoke.Error(),
+			errRemoveFinalizer.Error(),
+		)
+	case errRevoke != nil:
+		return errRevoke
+	case errRemoveFinalizer != nil:
+		return errRemoveFinalizer
+	default:
 		return nil
 	}
-	secret.Finalizers = []string{}
-	if err := lcc.client.Update(context.Background(), secret); err != nil {
-		glog.Errorf("[%s] Could not get secret \"%s\" in order to remove finalizer. "+
-			"Continuing with Cluster delete anyway", clusterNamespace, secretName)
+}
+
+// cleanUpLinodeCASecret cleans up the "linode" secret by removing the finalizer for the secret.
+func (lcc *LinodeClusterClient) cleanUpLinodeCASecret(ctx context.Context, namespace string) error {
+	secret, errSecret := lcc.getSecret(ctx, namespace, "linode-ca")
+	if errSecret != nil {
+		return errSecret
 	}
-	return nil
+
+	errRemoveFinalizer := lcc.removeFinalizerFromSecret(ctx, secret)
+
+	return errRemoveFinalizer
 }
 
 // Delete attempts to perform deletion for an LKE cluster.
@@ -837,6 +926,7 @@ func (lcc *LinodeClusterClient) removeFinalizerFromSecret(clusterNamespace strin
 // If the cluster should not be deleted, return an Error and cluster-api will
 // requeue this Cluster for deletion.
 func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
+	ctx := context.Background()
 	clusterNamespace := cluster.GetNamespace()
 	glog.Infof("[%s] Attempting to delete this Cluster", clusterNamespace)
 
@@ -849,7 +939,7 @@ func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 	// we cannot delete it.
 	machineList := &clusterv1.MachineList{}
 	listOptions := client.InNamespace(cluster.GetNamespace())
-	if err := lcc.client.List(context.Background(), listOptions, machineList); err != nil {
+	if err := lcc.client.List(ctx, listOptions, machineList); err != nil {
 		errStr := fmt.Sprintf("[%s] Error deleting Cluster. Error listing Machines for cluster: %v", clusterNamespace, err)
 		// Print the err that we return to cluster-api so that we can filter logs
 		// using our prefix
@@ -863,14 +953,22 @@ func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 	}
 
 	// If no Machines remain then we can remove the finalizers from the critical Secrets
-	if err := lcc.removeFinalizerFromSecret(clusterNamespace, "linode"); err != nil {
-		glog.Errorf("[%s] Error removing finalizer from secret \"%s\": %s"+
-			"Continuing with Cluster delete anyway", clusterNamespace, "linode", err)
+	if err := lcc.cleanUpLinodeSecret(ctx, clusterNamespace); err != nil {
+		glog.Errorf(
+			"[%s] Error cleaning up secret \"%s\" - continuing anyway: %s",
+			clusterNamespace,
+			"linode",
+			err,
+		)
 	}
 
-	if err := lcc.removeFinalizerFromSecret(clusterNamespace, "linode-ca"); err != nil {
-		glog.Errorf("[%s] Error removing finalizer from secret \"%s\": %s"+
-			"Continuing with Cluster delete anyway", clusterNamespace, "linode-ca", err)
+	if err := lcc.cleanUpLinodeCASecret(ctx, clusterNamespace); err != nil {
+		glog.Errorf(
+			"[%s] Error cleaning up secret \"%s\" - continuing anyway: %s",
+			clusterNamespace,
+			"linode-ca",
+			err,
+		)
 	}
 
 	// Delete our own namespace to clean everything else up
@@ -879,7 +977,7 @@ func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 			Name: clusterNamespace,
 		},
 	}
-	if err := lcc.client.Delete(context.Background(), clusterNamespaceObject); err != nil {
+	if err := lcc.client.Delete(ctx, clusterNamespaceObject); err != nil {
 		statusError, ok := err.(*k8sErrors.StatusError)
 		if ok && statusError.ErrStatus.Code == http.StatusConflict {
 			glog.Warningf(
