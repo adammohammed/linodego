@@ -58,29 +58,27 @@ func (lc *LinodeClient) savePrivateKey(key, namespace string) (string, error) {
 	return name, nil
 }
 
-func (lc *LinodeClient) getWGwgPubKey(cluster string) (string, error) {
-	namespace := clusterNamespace(cluster)
-
-	config, err := helpers.GetAPIConfig(lc.clusterConfigClient, namespace)
+func (lc *LinodeClient) getWGPubKey(clusterNamespace string) (string, error) {
+	config, err := helpers.GetAPIConfig(lc.clusterConfigClient, clusterNamespace)
 	if err != nil {
 		wgpub, wgpriv, err := generateWGKeys()
 		if err != nil {
-			return "", fmt.Errorf("Failed to generate WG keys: %v", err)
+			return "", fmt.Errorf("[%s] Failed to generate WG keys: %v", clusterNamespace, err)
 		}
 
-		wgprivname, err := lc.savePrivateKey(wgpriv, namespace)
+		wgprivname, err := lc.savePrivateKey(wgpriv, clusterNamespace)
 		if err != nil {
-			return "", fmt.Errorf("Failed to save WG private key in a secret: %v", err)
+			return "", fmt.Errorf("[%s] Failed to save WG private key in a secret: %v", clusterNamespace, err)
 		}
 
-		config, err = helpers.CreateAPIConfig(lc.clusterConfigClient, namespace, wgpub, wgprivname)
+		config, err = helpers.CreateAPIConfig(lc.clusterConfigClient, clusterNamespace, wgpub, wgprivname)
 		if err != nil {
-			return "", fmt.Errorf("Couldn't init initial WG config: %v", err)
+			return "", fmt.Errorf("[%s] Couldn't init initial WG config: %v", clusterNamespace, err)
 		}
 	}
 
 	if L := len(config.APIServers); L != 1 {
-		return "", fmt.Errorf("Corrupted WG config: len(config.APIServers)=%d", L)
+		return "", fmt.Errorf("[%s] Corrupted WG config: len(config.APIServers)=%d", clusterNamespace, L)
 	}
 	return config.APIServers[0].WGPublicKey, nil
 }

@@ -72,7 +72,7 @@ func isMaster(roles []lkeconfigv1.MachineRole) bool {
 func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, machine *clusterv1.Machine, config *lkeconfigv1.LkeMachineProviderConfig, wgPubKey string) (*initScript, error) {
 	initScript := &initScript{}
 
-	stackscript, err := lc.getInitStackScript(cluster, config)
+	stackscript, err := lc.getInitStackScript(cluster.ObjectMeta.Namespace, config)
 	if err != nil {
 		return nil, err
 	}
@@ -111,8 +111,9 @@ func (lc *LinodeClient) getInitScript(token string, cluster *clusterv1.Cluster, 
 	return initScript, nil
 }
 
-func (lc *LinodeClient) getInitStackScript(cluster *clusterv1.Cluster, config *lkeconfigv1.LkeMachineProviderConfig) (*linodego.Stackscript, error) {
-	linodeClient, _, err := getLinodeAPIClient(lc.client, cluster)
+func (lc *LinodeClient) getInitStackScript(clusterNamespace string, config *lkeconfigv1.LkeMachineProviderConfig) (*linodego.Stackscript, error) {
+
+	linodeClient, _, err := getLinodeAPIClient(lc.client, clusterNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("Error initializing Linode API client: %v", err)
 	}

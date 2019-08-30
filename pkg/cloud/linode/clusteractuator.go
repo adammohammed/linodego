@@ -307,20 +307,23 @@ type ChartSet struct {
 // Also, time and log how long a reconcile takes to complete.
 func (lcc *LinodeClusterClient) Reconcile(cluster *clusterv1.Cluster) error {
 
-	glog.V(3).Infof("[%v] reconciling", cluster.Name)
 	start := time.Now()
 
+	clusterNamespace := cluster.ObjectMeta.Namespace
+	glog.V(3).Infof("[%s] reconciling", clusterNamespace)
+
 	if err := lcc.reconcile(cluster); err != nil {
-		glog.V(3).Infof("[%v] reconcilation error [time spent %s]: %v", cluster.Name, time.Since(start), err)
+		glog.V(3).Infof("[%s] reconcilation error [time spent %s]: %v", clusterNamespace, time.Since(start), err)
 		return err
 	}
 
-	glog.V(3).Infof("[%v] reconcilation complete [time spent %s]", cluster.Name, time.Since(start))
+	glog.V(3).Infof("[%s] reconcilation complete [time spent %s]", clusterNamespace, time.Since(start))
 	return nil
 }
 
 func (lcc *LinodeClusterClient) reconcile(cluster *clusterv1.Cluster) error {
-	clusterNamespace := cluster.GetNamespace()
+
+	clusterNamespace := cluster.ObjectMeta.Namespace
 
 	clusterVersion, err := lcc.reconcileVersion(cluster)
 	if err != nil {
@@ -348,12 +351,12 @@ func (lcc *LinodeClusterClient) reconcile(cluster *clusterv1.Cluster) error {
 		return err
 	}
 
-	lkeClient, err := lkeClientNew(lcc.client, cluster.Name)
+	lkeClient, err := lkeClientNew(lcc.client, clusterNamespace)
 	if err != nil {
 		return err
 	}
 
-	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, cluster.Name)
+	chartDeployerLKE, err := newChartDeployerLKE(lcc.client, clusterNamespace)
 	if err != nil {
 		return err
 	}
@@ -495,20 +498,21 @@ func (chartSet *ChartSet) copyLkeSecret(client client.Client, secretDesc SecretD
 }
 
 func (chartSet *ChartSet) reconcileCPCChart(lcc *LinodeClusterClient, cluster *clusterv1.Cluster, chart string, values map[string]interface{}) error {
+	clusterNamespace := cluster.ObjectMeta.Namespace
 
 	chartDesc, ok := chartSet.chartDescriptions[chart]
 	if !ok {
-		return fmt.Errorf("chart %s isn't listed in resources", chart)
+		return fmt.Errorf("[%s] chart %s isn't listed in resources", clusterNamespace, chart)
 	}
 
 	// Check if the chart should be deployed
-	upToDate, err := chartSet.checkResources(lcc.client, clusterNamespace(cluster.Name), chartDesc)
+	upToDate, err := chartSet.checkResources(lcc.client, clusterNamespace, chartDesc)
 	if err != nil {
 		return err
 	}
 	if !upToDate {
 		// If it should, deploy it
-		if err := lcc.chartDeployer.DeployChart(chartDesc.path, cluster.Name, values); err != nil {
+		if err := lcc.chartDeployer.DeployChart(chartDesc.path, clusterNamespace, values); err != nil {
 			return err
 		}
 	}
@@ -518,11 +522,11 @@ func (chartSet *ChartSet) reconcileCPCChart(lcc *LinodeClusterClient, cluster *c
 
 func (chartSet *ChartSet) reconcileCPC(lcc *LinodeClusterClient, cluster *clusterv1.Cluster, secretsCache SecretsCache, values map[string]interface{}) error {
 
-	ns := cluster.GetNamespace()
+	clusterNamespace := cluster.ObjectMeta.Namespace
 
 	for _, secretDesc := range chartSet.CpcSecrets {
-		if secretData, err := chartSet.copyCPCSecret(lcc.client, ns, secretDesc); err != nil {
-			return fmt.Errorf("Error copying the %v secret to the LKE namespace: %v", secretDesc, err)
+		if secretData, err := chartSet.copyCPCSecret(lcc.client, clusterNamespace, secretDesc); err != nil {
+			return fmt.Errorf("[%s] Error copying the %v secret to the LKE namespace: %v", clusterNamespace, secretDesc, err)
 		} else {
 			secretsCache[secretDesc.Name] = secretData
 		}
@@ -668,7 +672,7 @@ func getCpcChartValues(secretsCache SecretsCache, clusterName, ip string) map[st
 func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Cluster, clusterVersion ClusterVersion) error {
 	apiService := &corev1.Service{}
 	apiService.ObjectMeta = metav1.ObjectMeta{
-		Namespace: cluster.GetNamespace(),
+		Namespace: cluster.ObjectMeta.Namespace,
 		Name:      "kube-apiserver",
 		Labels: map[string]string{
 			"run": "kube-apiserver",
@@ -693,22 +697,24 @@ func (lcc *LinodeClusterClient) reconcileAPIServerService(cluster *clusterv1.Clu
 
 func (lcc *LinodeClusterClient) getAPIServerIP(cluster *clusterv1.Cluster, clusterVersion ClusterVersion) (string, error) {
 
+	clusterNamespace := cluster.ObjectMeta.Namespace
+
 	/* If service doesn't exist then we will try to create it */
 	apiService := &corev1.Service{}
-	nn := types.NamespacedName{Namespace: cluster.GetNamespace(), Name: "kube-apiserver"}
+	nn := types.NamespacedName{Namespace: clusterNamespace, Name: "kube-apiserver"}
 	if err := lcc.client.Get(context.Background(), nn, apiService); err != nil {
 		if err := lcc.reconcileAPIServerService(cluster, clusterVersion); err != nil {
 			return "", err
 		}
 	}
-	glog.V(3).Infof("Found service for kube-apiserver for cluster %v: %v", cluster.Name, apiService.Name)
+	glog.V(3).Infof("[%s] Found service for kube-apiserver: %s", clusterNamespace, apiService.Name)
 	if len(apiService.Status.LoadBalancer.Ingress) < 1 {
-		return "", fmt.Errorf("No ExternalIPs yet for kube-apiserver for cluster %v", cluster.Name)
+		return "", fmt.Errorf("[%s] No ExternalIPs yet for kube-apiserver", clusterNamespace)
 	}
 	ip := apiService.Status.LoadBalancer.Ingress[0].IP
 
 	// Write that NodeBalancer address as the cluster API endpoint
-	glog.Infof("External IP for kube-apiserver for cluster %v: %v", cluster.Name, ip)
+	glog.Infof("[%s] External IP for kube-apiserver for cluster: %v", clusterNamespace, ip)
 	if err := lcc.writeClusterEndpoint(cluster, ip); err != nil {
 		return "", err
 	}
@@ -716,7 +722,7 @@ func (lcc *LinodeClusterClient) getAPIServerIP(cluster *clusterv1.Cluster, clust
 }
 
 func (lcc *LinodeClusterClient) writeClusterEndpoint(cluster *clusterv1.Cluster, ip string) error {
-	glog.Infof("Updating cluster endpoint %v: %v.\n", cluster.Name, ip)
+	glog.Infof("[%s] Updating cluster endpoint with IP: %s\n", cluster.ObjectMeta.Namespace, ip)
 	cluster.Status.APIEndpoints = []clusterv1.APIEndpoint{{
 		Host: ip,
 		Port: 6443,
@@ -750,19 +756,22 @@ func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(
 	ip string,
 	lkeClient client.Client,
 ) error {
-	glog.Infof("Reconciling Addon resources for cluster %v.", cluster.Name)
+	clusterNamespace := cluster.ObjectMeta.Namespace
+
+	glog.Infof("[%s] Reconciling Addon resources", clusterNamespace)
 
 	kubeadmBin, err := getKubeadm(clusterVersion)
 	if err != nil {
-		return fmt.Errorf("version %v is not supported: %v", clusterVersion, err)
+		return fmt.Errorf("[%s] Cluster version %v is not supported: %v", clusterNamespace, clusterVersion, err)
 	}
 
 	if checkDaemonset(lkeClient, "kube-system", "kube-proxy") {
-		glog.Infof("Cluster %v already has reconcileAddonsAndConfigmaps", cluster.Name)
+		// Note: If anything after the kube-proxy phase failed previously then the cluster will never reconcile
+		glog.Infof("[%s] already has reconcileAddonsAndConfigmaps", clusterNamespace)
 		return nil
 	}
 
-	kubeconfig, err := tempKubeconfig(lcc.client, cluster.Name)
+	kubeconfig, err := tempKubeconfig(lcc.client, clusterNamespace)
 	if err != nil {
 		return err
 	}
@@ -788,8 +797,9 @@ func (lcc *LinodeClusterClient) reconcileAddonsAndConfigmaps(
 }
 
 // creates a new client for LKE
-func lkeClientNew(cpcClient client.Client, cluster string) (client.Client, error) {
-	kubeconfig, err := tempKubeconfig(cpcClient, cluster)
+func lkeClientNew(cpcClient client.Client, clusterNamespace string) (client.Client, error) {
+
+	kubeconfig, err := tempKubeconfig(cpcClient, clusterNamespace)
 	if err != nil {
 		return nil, err
 	}
@@ -926,8 +936,9 @@ func (lcc *LinodeClusterClient) cleanUpLinodeCASecret(ctx context.Context, names
 // If the cluster should not be deleted, return an Error and cluster-api will
 // requeue this Cluster for deletion.
 func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
+
 	ctx := context.Background()
-	clusterNamespace := cluster.GetNamespace()
+	clusterNamespace := cluster.ObjectMeta.Namespace
 	glog.Infof("[%s] Attempting to delete this Cluster", clusterNamespace)
 
 	// Delete the control plane Pod-creating resources including CCM (not
@@ -938,7 +949,7 @@ func (lcc *LinodeClusterClient) Delete(cluster *clusterv1.Cluster) error {
 	// List all Machines for this cluster. If any Machines exist for this cluster
 	// we cannot delete it.
 	machineList := &clusterv1.MachineList{}
-	listOptions := client.InNamespace(cluster.GetNamespace())
+	listOptions := client.InNamespace(clusterNamespace)
 	if err := lcc.client.List(ctx, listOptions, machineList); err != nil {
 		errStr := fmt.Sprintf("[%s] Error deleting Cluster. Error listing Machines for cluster: %v", clusterNamespace, err)
 		// Print the err that we return to cluster-api so that we can filter logs

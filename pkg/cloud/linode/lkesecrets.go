@@ -211,6 +211,7 @@ func run(prog string, args ...string) (string, error) {
 type kubeadmConfigParams struct {
 	NodeBalancerHostname string
 	ClusterName          string
+	ClusterNamespace     string
 	CertsDir             string
 	KubeconfigDir        string
 	K8SVersion           string
@@ -221,7 +222,7 @@ apiVersion: kubeadm.k8s.io/v1beta1
 apiServer:
   certSANs:
   - {{ .NodeBalancerHostname }}
-  - kube-apiserver.kube-system-{{ .ClusterName }}.svc.cluster.local
+  - kube-apiserver.{{ .ClusterNamespace }}.svc.cluster.local
   - localhost
   extraArgs:
     authorization-mode: Node,RBAC
@@ -242,10 +243,10 @@ etcd:
     dataDir: /var/lib/etcd
     serverCertSANs:
       - etcd
-      - etcd.kube-system-{{ .ClusterName }}.svc.cluster.local
+      - etcd.{{ .ClusterNamespace }}.svc.cluster.local
     peerCertSANs:
       - etcd
-      - etcd.kube-system-{{ .ClusterName }}.svc.cluster.local
+      - etcd.{{ .ClusterNamespace }}.svc.cluster.local
 imageRepository: k8s.gcr.io
 kubernetesVersion: {{ .K8SVersion }}
 networking:
@@ -256,13 +257,16 @@ scheduler: {}
 `
 
 func getKubeadmConfig(client client.Client, cluster *clusterv1.Cluster, clusterVersion ClusterVersion, dirname string) ([]byte, error) {
+	clusterNamespace := cluster.ObjectMeta.Namespace
+
 	if len(cluster.Status.APIEndpoints) < 1 {
-		return nil, fmt.Errorf("No APIEndpoints while writing certs for cluster (LoadBalancer Service not provisioned?) %v", cluster.Name)
+		return nil, fmt.Errorf("[%s] No APIEndpoints while writing certs for cluster (LoadBalancer Service not provisioned?)", clusterNamespace)
 	}
 
 	configParams := kubeadmConfigParams{
 		NodeBalancerHostname: cluster.Status.APIEndpoints[0].Host,
 		ClusterName:          cluster.Name,
+		ClusterNamespace:     cluster.ObjectMeta.Namespace,
 		CertsDir:             dirname,
 		K8SVersion:           clusterVersion.K8S(),
 	}
@@ -330,8 +334,7 @@ func generateCertsInit(client client.Client, cluster *clusterv1.Cluster, cluster
 	}
 
 	// set proper domain names in kubeconfigs
-
-	apiServer := fmt.Sprintf("kube-apiserver.%s.svc.cluster.local", clusterNamespace(cluster.Name))
+	apiServer := fmt.Sprintf("kube-apiserver.%s.svc.cluster.local", cluster.ObjectMeta.Namespace)
 
 	if err := patchKubeconfig(kubeconfigDir+"/"+"controller-manager.conf", apiServer, "6443"); err != nil {
 		return nil, err
@@ -489,10 +492,10 @@ func certSecretsExist(client client.Client, ns string, secretsCache SecretsCache
 
 func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster, secretsCache SecretsCache, clusterVersion ClusterVersion) error {
 
-	ns := cluster.GetNamespace()
+	clusterNamespace := cluster.ObjectMeta.Namespace
 
-	if certSecretsExist(client, ns, secretsCache) {
-		glog.Infof("[%v] already has CertSecrets", cluster.Name)
+	if certSecretsExist(client, clusterNamespace, secretsCache) {
+		glog.Infof("[%s] already has CertSecrets", clusterNamespace)
 		return nil
 	}
 
@@ -502,13 +505,13 @@ func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster, secre
 	}
 
 	// Write secrets for the core k8s PKI material
-	if err := createOpaqueSecret(client, ns, "k8s-certs", k8sCerts, false, ""); err != nil {
+	if err := createOpaqueSecret(client, clusterNamespace, "k8s-certs", k8sCerts, false, ""); err != nil {
 		return err
 	}
 	secretsCache["k8s-certs"] = k8sCerts
 
 	// Write secrets for the etcd PKI material
-	if err := createOpaqueSecret(client, ns, "etcd-certs", etcdCerts, false, ""); err != nil {
+	if err := createOpaqueSecret(client, clusterNamespace, "etcd-certs", etcdCerts, false, ""); err != nil {
 		return err
 	}
 	secretsCache["etcd-certs"] = etcdCerts
@@ -516,7 +519,7 @@ func generateCertSecrets(client client.Client, cluster *clusterv1.Cluster, secre
 	// Write secrets for each of the client kubeconfigs that we generated for
 	// the admin, controller-manager, scheduler, and kubelet
 	for secretName, secretMap := range kubeconfigs {
-		if err := createOpaqueSecret(client, ns, secretName, secretMap, false, ""); err != nil {
+		if err := createOpaqueSecret(client, clusterNamespace, secretName, secretMap, false, ""); err != nil {
 			return err
 		}
 		secretsCache[secretName] = secretMap
@@ -552,11 +555,12 @@ func generateNodeWatcherToken() ([]byte, error) {
  *
  */
 func generateNodeWatcherSecrets(client client.Client, cluster *clusterv1.Cluster, secretsCache SecretsCache) error {
-	ns := cluster.GetNamespace()
+
+	clusterNamespace := cluster.ObjectMeta.Namespace
 	name := "wg-node-watcher-token"
 
-	if checkSecret(client, ns, name, secretsCache) {
-		glog.Infof("[%v] already has '%v' secret", cluster.Name, name)
+	if checkSecret(client, clusterNamespace, name, secretsCache) {
+		glog.Infof("[%s] already has '%v' secret", clusterNamespace, name)
 		return nil
 	}
 
@@ -567,7 +571,7 @@ func generateNodeWatcherSecrets(client client.Client, cluster *clusterv1.Cluster
 
 	data := map[string][]byte{name: token}
 	secretsCache[name] = data
-	return createOpaqueSecret(client, cluster.GetNamespace(), name, data, false, "")
+	return createOpaqueSecret(client, clusterNamespace, name, data, false, "")
 }
 
 /*
@@ -581,19 +585,19 @@ func generateNodeWatcherSecrets(client client.Client, cluster *clusterv1.Cluster
  *       endpoint: $endpoint
  *     metadata:
  *       name: object-storage
- *       namespace: kube-system-$CLUSTER_NAME
+ *       namespace: $CLUSTER_NAMESPACE
  *
  * writeObjectStorageSecret copies the object-storage secret from the kube-system namespace to the child
  * cluster's namespace, if a secret with the given name does not exist. If the object-storage secret
  * does exist, this function will have no effect.
  */
 func writeObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster, secretsCache SecretsCache) error {
+	clusterNamespace := cluster.ObjectMeta.Namespace
 
-	ns := cluster.GetNamespace()
 	name := "object-storage"
 
-	if checkSecret(client, ns, name, secretsCache) {
-		glog.Infof("[%v] already has '%v' secret", cluster.Name, name)
+	if checkSecret(client, clusterNamespace, name, secretsCache) {
+		glog.Infof("[%s] already has '%v' secret", clusterNamespace, name)
 		return nil
 	}
 
@@ -608,7 +612,7 @@ func writeObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster, 
 	}
 
 	secretsCache[name] = objStorageSecret.Data
-	return createOpaqueSecret(client, cluster.GetNamespace(), name, objStorageSecret.Data, false, "")
+	return createOpaqueSecret(client, clusterNamespace, name, objStorageSecret.Data, false, "")
 }
 
 // createObjectStorageBucketFromSecret gets the object-storage bucket from the child cluster's namespace
@@ -616,11 +620,12 @@ func writeObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster, 
 // secret on the given endpoint in the secret. If a bucket key already exists in the object-storage secret,
 // this function will return that bucket key's value (i.e. the name of the bucket).
 func createObjectStorageBucketFromSecret(client client.Client, cluster *clusterv1.Cluster, secretsCache SecretsCache) (string, error) {
-	name := "object-storage"
-	namespace := cluster.GetNamespace()
+	clusterNamespace := cluster.ObjectMeta.Namespace
 
-	if !checkSecret(client, namespace, name, secretsCache) {
-		return "", fmt.Errorf("[%s] Could not find object storage secret while generating bucket name", namespace)
+	name := "object-storage"
+
+	if !checkSecret(client, clusterNamespace, name, secretsCache) {
+		return "", fmt.Errorf("[%s] Could not find object storage secret while generating bucket name", clusterNamespace)
 	}
 	// checkSecret has the side effect of updating the secretsCache
 	objectStorageSecret := secretsCache[name]
@@ -629,7 +634,7 @@ func createObjectStorageBucketFromSecret(client client.Client, cluster *clusterv
 	if ok {
 		glog.Infof(
 			"[%s] bucket %s already exists for object-storage secret, not creating a bucket",
-			namespace,
+			clusterNamespace,
 			string(bucketBytes),
 		)
 		return string(bucketBytes), nil
@@ -637,17 +642,17 @@ func createObjectStorageBucketFromSecret(client client.Client, cluster *clusterv
 
 	accessKeyBytes, ok := objectStorageSecret["access"]
 	if !ok {
-		return "", fmt.Errorf("access not found in object-storage secret")
+		return "", fmt.Errorf("[%s] access not found in object-storage secret", clusterNamespace)
 	}
 
 	secretKeyBytes, ok := objectStorageSecret["secret"]
 	if !ok {
-		return "", fmt.Errorf("secret not found in object-storage secret")
+		return "", fmt.Errorf("[%s] secret not found in object-storage secret", clusterNamespace)
 	}
 
 	endpointBytes, ok := objectStorageSecret["endpoint"]
 	if !ok {
-		return "", fmt.Errorf("endpoint not found in object-storage secret")
+		return "", fmt.Errorf("[%s] endpoint not found in object-storage secret", clusterNamespace)
 	}
 
 	bucketName, errCreateBucket := createObjectBucket(
@@ -664,8 +669,9 @@ func createObjectStorageBucketFromSecret(client client.Client, cluster *clusterv
 // corresponding to a bucket to store etcd backups in. If the bucket name matches the current value of
 // the bucket key in the object-storage secret, this function will have no effect.
 func updateObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster, bucketName string, secretsCache SecretsCache) error {
+
 	name := "object-storage"
-	namespace := cluster.GetNamespace()
+	namespace := cluster.ObjectMeta.Namespace
 
 	if !checkSecret(client, namespace, name, secretsCache) {
 		return fmt.Errorf("[%s] Could not find object storage secret while updating the bucket name", namespace)
@@ -686,7 +692,7 @@ func updateObjectStorageSecret(client client.Client, cluster *clusterv1.Cluster,
 
 	objectStorageSecret["bucket"] = []byte(bucketName)
 
-	return createOpaqueSecret(client, cluster.GetNamespace(), name, objectStorageSecret, true, "")
+	return createOpaqueSecret(client, namespace, name, objectStorageSecret, true, "")
 }
 
 /*
@@ -740,8 +746,8 @@ func (lcc *LinodeClusterClient) reconcileSecrets(
 	clusterVersion ClusterVersion,
 	chartSet *ChartSet,
 ) (SecretsCache, error) {
-	glog.Infof("Creating secrets for cluster %v.", cluster.Name)
-	clusterNamespace := cluster.GetNamespace()
+	clusterNamespace := cluster.ObjectMeta.Namespace
+	glog.Infof("[%s] Reconciling secrets", clusterNamespace)
 
 	secretsCache := map[string]map[string][]byte{}
 

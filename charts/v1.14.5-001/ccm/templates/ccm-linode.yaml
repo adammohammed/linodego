@@ -6,7 +6,7 @@ metadata:
     app: ccm-linode
   annotations:
     lke.linode.com/caplke-version: "v1.14.5-001"
-  namespace: kube-system-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   replicas: 1
   selector:

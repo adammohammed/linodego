@@ -103,30 +103,30 @@ func newClusterConfigClient() (*lkeclient.ConfigV1Alpha1Client, error) {
 	}
 }
 
-func getLinodeAPIClient(client client.Client, cluster *clusterv1.Cluster) (*linodego.Client, string, error) {
+func getLinodeAPIClient(client client.Client, clusterNamespace string) (*linodego.Client, string, error) {
+
 	/*
 	 * We construct a new client every time that we make a Linode API call so that
 	 * the API Token Secret can be rotated at any time. We need a Cluster object
 	 * so that we can associate a different API token with each Cluster.
 	 */
 	apiTokenSecret := &corev1.Secret{}
-	namespace := cluster.GetNamespace()
 	err := client.Get(context.Background(),
-		types.NamespacedName{Namespace: namespace, Name: linodeAPITokenSecretName},
+		types.NamespacedName{Namespace: clusterNamespace, Name: linodeAPITokenSecretName},
 		apiTokenSecret)
 
 	if err != nil {
-		return nil, "", fmt.Errorf("error retrieving Linode API token secret for cluster %v", err)
+		return nil, "", fmt.Errorf("[%s] error retrieving Linode API token secret: %v", clusterNamespace, err)
 	}
 
 	apiKey, ok := apiTokenSecret.Data["token"]
 	if !ok {
-		return nil, "", fmt.Errorf("Linode API token secret for namespace %s is missing 'token' data", namespace)
+		return nil, "", fmt.Errorf("[%s] Linode API token secret missing 'token' data", clusterNamespace)
 	}
 
 	region, ok := apiTokenSecret.Data["region"]
 	if !ok {
-		return nil, "", fmt.Errorf("Linode API token secret for namespace %s is missing 'region' data", namespace)
+		return nil, "", fmt.Errorf("[%s] Linode API token secret missing 'region' data", clusterNamespace)
 	}
 
 	linodeClient := linodego.NewClient(nil)
@@ -150,24 +150,28 @@ func (lc *LinodeClient) setKubeletVersion(machine *clusterv1.Machine, cluster *c
 func (lc *LinodeClient) Create(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 
 	err := lc.create(ctx, cluster, machine)
-	glog.Infof("creating machine %v/%v: err=%v", cluster.Name, machine.Name, err)
 	return err
 
 }
 
 func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
-	glog.Infof("Creating machine %v/%v", cluster.Name, machine.Name)
+
+	clusterNamespace := cluster.ObjectMeta.Namespace
+	machineName := machine.Name
+
+	glog.Infof("[%s/%s] Creating machine", clusterNamespace, machineName)
 
 	instance, err := lc.instanceIfExists(cluster, machine)
 	if err != nil {
-		return fmt.Errorf("Couldn't test if Linode instance exists %v", err)
+		return fmt.Errorf("[%s/%s] Couldn't test if Linode instance exists %v", clusterNamespace, machineName, err)
 	}
 
 	if instance == nil {
 		machineConfig, err := machineProviderConfig(machine.Spec.ProviderSpec)
 		if err != nil {
 			return lc.handleMachineError(machine, apierrors.InvalidMachineConfiguration(
-				"Cannot unmarshal machine's providerConfig field: %v", err), createEventAction)
+				"[%s/%s] Cannot unmarshal machine's providerConfig field: %v", clusterNamespace, machineName, err),
+				createEventAction)
 		}
 		if verr := lc.setKubeletVersion(machine, cluster); verr != nil {
 			return lc.handleMachineError(machine, verr, createEventAction)
@@ -175,31 +179,31 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 
 		clusterConfig, err := clusterProviderConfig(cluster.Spec.ProviderSpec)
 		if clusterConfig == nil {
-			return fmt.Errorf("LKE cluster spec was not provided for cluster %v", cluster.Name)
+			return fmt.Errorf("[%s] LKE cluster spec was not provided for cluster", clusterNamespace)
 		}
 		if err != nil {
 			return err
 		}
 
-		token, err := getJoinToken(lc.client, cluster.Name)
+		token, err := getJoinToken(lc.client, clusterNamespace)
 		if err != nil {
 			return err
 		}
 
-		wgPubKey, err := lc.getWGwgPubKey(cluster.Name)
+		wgPubKey, err := lc.getWGPubKey(clusterNamespace)
 		if err != nil {
-			return fmt.Errorf("Couldn't get WG public key for cluster %s: %v", cluster.Name, err)
+			return fmt.Errorf("[%s] Couldn't get WG public key: %v", clusterNamespace, err)
 		}
 
-		glog.Infof("roles %v", machineConfig.Roles)
+		glog.Infof("[%s/%s] machine roles %v", clusterNamespace, machineName, machineConfig.Roles)
 		initScript, err := lc.getInitScript(token, cluster, machine, machineConfig, wgPubKey)
 		if err != nil {
 			return err
 		}
 
-		linodeClient, CPCRegion, err := getLinodeAPIClient(lc.client, cluster)
+		linodeClient, CPCRegion, err := getLinodeAPIClient(lc.client, clusterNamespace)
 		if err != nil {
-			return fmt.Errorf("Error initializing Linode API client: %v", err)
+			return fmt.Errorf("[%s] Error initializing Linode API client: %v", clusterNamespace, err)
 		}
 
 		// 24 hex characters
@@ -300,21 +304,23 @@ func (lc *LinodeClient) handleMachineError(machine *clusterv1.Machine, err *apie
 }
 
 func (lc *LinodeClient) Delete(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
+
+	clusterNamespace := cluster.ObjectMeta.Namespace
 	linodeIDStr, ok := machine.ObjectMeta.Annotations[machineLinodeIDAnnotationName]
 	if !ok {
-		glog.Infof("Deleting machine resource, but no Linode deleted (no Linode ID annotation)")
+		glog.Infof("[%s/%s] Deleting Machine object with no associated Linode ID", clusterNamespace, machine.Name)
 		return nil
 	}
-	glog.Infof("Deleting Linode with ID %s", linodeIDStr)
+	glog.Infof("[%s/%s] Deleting Linode with ID %s", clusterNamespace, machine.Name, linodeIDStr)
 
 	linodeID, err := strconv.Atoi(linodeIDStr)
 	if err != nil {
 		return fmt.Errorf("Error converting Linode ID annotation to integer")
 	}
 
-	linodeClient, _, err := getLinodeAPIClient(lc.client, cluster)
+	linodeClient, _, err := getLinodeAPIClient(lc.client, clusterNamespace)
 	if err != nil {
-		return fmt.Errorf("Error initializing Linode API client: %v", err)
+		return fmt.Errorf("[%s] Error initializing Linode API client: %v", clusterNamespace, err)
 	}
 
 	err = linodeClient.DeleteInstance(context.Background(), linodeID)
@@ -329,25 +335,27 @@ func (lc *LinodeClient) Delete(ctx context.Context, cluster *clusterv1.Cluster, 
 		 * an infinite loop and won't be able to delete a machine.
 		 */
 		if ok && originalErr.Code == 404 {
-			glog.Infof("Linode with ID %s doesn't exist; Deleting machine anyway", linodeIDStr)
+			glog.Infof("[%s/%s] Linode with ID %s doesn't exist; Deleting machine anyway",
+				clusterNamespace,
+				machine.Name,
+				linodeIDStr)
 			return nil
 		}
 
-		return fmt.Errorf("Error deleting Linode %d: %s", linodeID, err.Error())
+		return fmt.Errorf("[%s/%s] Error deleting Linode %d: %s", clusterNamespace, machine.Name, linodeID, err.Error())
 	}
 
-	glog.Infof("Deleted Linode with ID %s", linodeIDStr)
+	glog.Infof("[%s/%s] Deleted Linode with ID %s", clusterNamespace, machine.Name, linodeIDStr)
 	return nil
 }
 
-func (lc *LinodeClient) Update(ctx context.Context, cluster *clusterv1.Cluster, goalMachine *clusterv1.Machine) error {
-	glog.Infof("TODO (Not Implemented): Updating machine with cluster %v.", cluster.Name)
-	glog.Infof("TODO (Not Implemented): Updating machine %v.", goalMachine.Name)
+func (lc *LinodeClient) Update(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
+	glog.Infof("[%s/%s] (Not Implemented): Updating machine", cluster.ObjectMeta.Namespace, machine.Name)
 	return nil
 }
 
 func (lc *LinodeClient) Exists(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) (bool, error) {
-	glog.Infof("Checking Exists for machine %v/%v", cluster.Name, machine.Name)
+	glog.Infof("[%s/%s] Checking Exists for machine", cluster.ObjectMeta.Namespace, machine.Name)
 	instance, err := lc.instanceIfExists(cluster, machine)
 	if err != nil {
 		return false, err
@@ -391,9 +399,10 @@ func (lc *LinodeClient) instanceIfExists(cluster *clusterv1.Cluster, machine *cl
 
 	// Get the VM via Linode label: <cluster-name>-<machine-name>
 	label := lc.MachineLabel(cluster, identifyingMachine)
-	linodeClient, _, err := getLinodeAPIClient(lc.client, cluster)
+	clusterNamespace := cluster.ObjectMeta.Namespace
+	linodeClient, _, err := getLinodeAPIClient(lc.client, clusterNamespace)
 	if err != nil {
-		return nil, fmt.Errorf("Error initializing Linode API client: %v", err)
+		return nil, fmt.Errorf("[%s] Error initializing Linode API client: %v", clusterNamespace, err)
 	}
 	instance, err := getInstanceByLabel(linodeClient, label)
 	if err != nil {
@@ -417,14 +426,16 @@ func getInstanceByLabel(linodeClient *linodego.Client, label string) (*linodego.
 	return &instances[0], nil
 }
 
+// GetIP gets the IP address of a Machine for the sake of clusterctl.
+// We have not implemented this because we do not use clusterctl.
 func (lc *LinodeClient) GetIP(cluster *clusterv1.Cluster, machine *clusterv1.Machine) (string, error) {
-	glog.Infof("TODO (Not Implemented): Getting IP for machine with cluster %v.", cluster.Name)
-	glog.Infof("TODO (Not Implemented): Getting IP for machine %v.", machine.Name)
+	glog.Infof("[%s/%s] TODO (Not Implemented): Getting IP for machine.", cluster.ObjectMeta.Namespace, machine.Name)
 	return "", nil
 }
 
+// GetKubeConfig gets the kubeconfig from a master machine for the sake of clusterctl.
+// We have not implemented this because we do not use clusterctl.
 func (lc *LinodeClient) GetKubeConfig(cluster *clusterv1.Cluster, master *clusterv1.Machine) (string, error) {
-	glog.Infof("TODO (Not Implemented): Getting KubeConfig for master with cluster %v.", cluster.Name)
-	glog.Infof("TODO (Not Implemented): Getting KubeConfig for master %v.", master.Name)
+	glog.Infof("[%s/%s] TODO (Not Implemented): Getting KubeConfig from master machine.", cluster.ObjectMeta.Namespace, master.Name)
 	return "", nil
 }

@@ -77,17 +77,13 @@ func tempfile(prefix string, data []byte) (string, error) {
 	return file.Name(), nil
 }
 
-func clusterNamespace(cluster string) string {
-	return "kube-system-" + cluster
-}
-
 /*
  * tempKubeconfig creates a temporary file containing admin config for a LKE
  * cluster specified in the arguments and returns the name of this new file.
  */
-func tempKubeconfig(cpcClient client.Client, cluster string) (string, error) {
+func tempKubeconfig(cpcClient client.Client, clusterNamespace string) (string, error) {
 	secret := &corev1.Secret{}
-	namespacedName := types.NamespacedName{Namespace: clusterNamespace(cluster), Name: "admin-kubeconfig"}
+	namespacedName := types.NamespacedName{Namespace: clusterNamespace, Name: "admin-kubeconfig"}
 
 	err := cpcClient.Get(context.Background(), namespacedName, secret)
 	if err != nil {
@@ -95,7 +91,7 @@ func tempKubeconfig(cpcClient client.Client, cluster string) (string, error) {
 	}
 
 	if len(secret.Data["admin.conf"]) == 0 {
-		return "", fmt.Errorf("cluster %s: admin-kubeconfig: admin.conf: empty", cluster)
+		return "", fmt.Errorf("[%s] admin-kubeconfig secret: admin.conf: empty", clusterNamespace)
 	}
 
 	return tempfile("lkeconfig", secret.Data["admin.conf"])
@@ -105,8 +101,8 @@ func tempKubeconfig(cpcClient client.Client, cluster string) (string, error) {
  * lkeClient returns an LKE client based on its arguments. The credentials for
  * the LKE cluster are taken from the CPC using cpcClient
  */
-func lkeChartClient(cpcClient client.Client, cluster string) (*kubernetesbase.Client, error) {
-	kubeconfig, err := tempKubeconfig(cpcClient, cluster)
+func lkeChartClient(cpcClient client.Client, clusterNamespace string) (*kubernetesbase.Client, error) {
+	kubeconfig, err := tempKubeconfig(cpcClient, clusterNamespace)
 	if err != nil {
 		return nil, err
 	}
@@ -125,8 +121,9 @@ func lkeChartClient(cpcClient client.Client, cluster string) (*kubernetesbase.Cl
  * a LKE cluster specified in the arguments. The cpcClient argument is used to
  * grab LKE credentials from CPC (kept as a secret).
  */
-func newChartDeployerLKE(cpcClient client.Client, cluster string) (*ChartDeployer, error) {
-	client, err := lkeChartClient(cpcClient, cluster)
+func newChartDeployerLKE(cpcClient client.Client, clusterNamespace string) (*ChartDeployer, error) {
+
+	client, err := lkeChartClient(cpcClient, clusterNamespace)
 	if err != nil {
 		return nil, err
 	}
