@@ -18,6 +18,8 @@ limitations under the License.
 package linode
 
 import (
+	crand "crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
@@ -31,7 +33,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	bootstraputil "k8s.io/client-go/tools/bootstrap/token/util"
 	"k8s.io/client-go/tools/record"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
 	apierrors "sigs.k8s.io/cluster-api/pkg/errors"
@@ -201,12 +202,13 @@ func (lc *LinodeClient) create(ctx context.Context, cluster *clusterv1.Cluster, 
 			return fmt.Errorf("Error initializing Linode API client: %v", err)
 		}
 
-		/*
-		* Use a bootstrap token as a random root password. Replace this if the
-		* function is removed upstream. Don't store this - the idea is that no one
-		* ever knows the root password.
-		 */
-		rootPass, err := bootstraputil.GenerateBootstrapToken()
+		// 24 hex characters
+		// The idea here is that no one ever knows the root password to these machines
+		passwordBytes := make([]byte, 12)
+		if _, err := crand.Read(passwordBytes); err != nil {
+			return err
+		}
+		rootPass := hex.EncodeToString(passwordBytes)
 		if err != nil {
 			return fmt.Errorf("Couldn't generate random root password: %v", err)
 		}

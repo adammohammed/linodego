@@ -30,6 +30,6 @@ func init() {
 		if err != nil {
 			return err
 		}
-		return cluster.AddWithActuator(m, actuator)
+		return cluster.AddWithActuator(m, actuator, concurrentReconciles)
 	})
 }
