@@ -1,7 +1,6 @@
 FROM alpine:edge
 WORKDIR /root/
 COPY charts/ charts/
-COPY ./run/manager .
 RUN \
     echo http://dl-cdn.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories && \
     apk update && \
