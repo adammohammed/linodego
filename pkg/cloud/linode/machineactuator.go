@@ -52,8 +52,8 @@ const (
 	deleteEventAction                 = "Delete"
 	noEventAction                     = ""
 	linodeAPITokenSecretName          = "linode"
-	machineLinodeIDAnnotationName     = "linode-id"
-	machineLinodeStatusAnnotationname = "linode-status"
+	machineLinodeIDAnnotationName     = "lke.linode.com/linode-id"
+	machineLinodeStatusAnnotationname = "lke.linode.com/linode-status"
 )
 
 var (
