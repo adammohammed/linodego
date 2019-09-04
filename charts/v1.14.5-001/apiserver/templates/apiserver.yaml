@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  namespace: kube-system-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   name: kube-apiserver
   labels:
     app: kube-apiserver
@@ -23,7 +23,7 @@ spec:
         component: kube-apiserver
         tier: control-plane
       name: kube-apiserver
-      namespace: kube-system-{{ .Release.Namespace }}
+      namespace: {{ .Release.Namespace }}
     spec:
       containers:
       - command:
@@ -158,7 +158,7 @@ kind: Role
 metadata:
   creationTimestamp: null
   name: wg-node-controller-role
-  namespace: kube-system-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   annotations:
     lke.linode.com/caplke-version: "v1.14.5-001"
 rules:
@@ -180,7 +180,7 @@ kind: RoleBinding
 metadata:
   creationTimestamp: null
   name: wg-node-controller-rolebinding
-  namespace: kube-system-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   annotations:
     lke.linode.com/caplke-version: "v1.14.5-001"
 roleRef:
@@ -190,4 +190,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: kube-system-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}

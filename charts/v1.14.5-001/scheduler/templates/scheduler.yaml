@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kube-scheduler
-  namespace: kube-system-{{ .Values.ClusterName }}
+  namespace: {{ .Release.Namespace }}
   labels:
     lke.linode.com/role: controlplane
     app: kubernetes
@@ -22,7 +22,7 @@ spec:
         app: kubernetes
         component: kube-scheduler
       name: kube-scheduler
-      namespace: kube-system-{{ .Values.ClusterName }}
+      namespace: {{ .Release.Namespace }}
     spec:
       containers:
       - command:

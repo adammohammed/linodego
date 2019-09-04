@@ -6,7 +6,7 @@ metadata:
     app: ccm-linode
   annotations:
     lke.linode.com/caplke-version: "bleeding"
-  namespace: kube-system-{{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   replicas: 1
   selector:

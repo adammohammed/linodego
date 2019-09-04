@@ -60,12 +60,12 @@ func system(cmd_format string, args ...interface{}) (string, error) {
  * the command line arguments. If token doesn't exist, the function creates it.
  * The function also tries to remove all expired tokens from the cluster.
  */
-func getJoinToken(cpcClient client.Client, cluster string) (string, error) {
+func getJoinToken(cpcClient client.Client, clusterNamespace string) (string, error) {
 
 	/*
 	 * A temporary kube config, as kubeadm requires a file argument
 	 */
-	kubeconfig, err := tempKubeconfig(cpcClient, cluster)
+	kubeconfig, err := tempKubeconfig(cpcClient, clusterNamespace)
 	if err != nil {
 		return "", err
 	}

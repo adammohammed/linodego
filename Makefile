@@ -92,6 +92,12 @@ installcrds: manifests
 deploy: manifests
 	kustomize build config/default | kubectl apply -f -
 
+.PHONY: imgname
+# print the Docker image name that will be used
+# useful for subsequently defining it on the shell
+imgname:
+	echo "export IMG=${IMG}"
+
 # Build the docker image
 .PHONY: docker-build
 docker-build: build
