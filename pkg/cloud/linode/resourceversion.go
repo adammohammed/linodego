@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	v1beta1 "k8s.io/api/rbac/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -159,6 +160,15 @@ func getStorageclassMeta(client client.Client, name string) *metav1.ObjectMeta {
 }
 */
 
+func getNetPolicyMeta(client client.Client, namespace, name string) *metav1.ObjectMeta {
+	x := &netv1.NetworkPolicy{}
+	nn := types.NamespacedName{Namespace: namespace, Name: name}
+	if err := client.Get(context.Background(), nn, x); err != nil {
+		return nil
+	}
+	return &x.ObjectMeta
+}
+
 func getResourceVersion(client client.Client, namespace string, r *Resource) (string, error) {
 
 	var meta *metav1.ObjectMeta
@@ -193,6 +203,8 @@ func getResourceVersion(client client.Client, namespace string, r *Resource) (st
 	case "storageclass":
 		return TreatMeAsUptodate, nil
 	//meta = XXX getStorageclassMeta(client, r.Name)
+	case "networkpolicy":
+		meta = getNetPolicyMeta(client, namespace, r.Name)
 	default:
 		return "", fmt.Errorf("can't get meta-information for resource kind %s", r.Kind)
 	}

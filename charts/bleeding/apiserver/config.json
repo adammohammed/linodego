@@ -11,6 +11,18 @@
         {
             "kind": "rolebinding",
             "name": "wg-node-controller-rolebinding"
+        },
+        {
+            "kind": "networkpolicy",
+            "name": "api-to-etcd"
+        },
+        {
+            "kind": "networkpolicy",
+            "name": "api-to-k8s"
+        },
+        {
+            "kind": "networkpolicy",
+            "name": "api-to-dns"
         }
     ],
     "SecrtesRequired": [

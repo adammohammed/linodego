@@ -191,3 +191,91 @@ subjects:
 - kind: ServiceAccount
   name: default
   namespace: {{ .Release.Namespace }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-to-etcd
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    lke.linode.com/caplke-version: "bleeding"
+spec:
+  podSelector:
+    matchLabels:
+      component: "kube-apiserver"
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          component: "etcd"
+      namespaceSelector:
+        matchLabels:
+          name: {{ .Release.Namespace }}
+    ports:
+    - protocol: TCP
+      port: 2379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-to-k8s
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    lke.linode.com/caplke-version: "bleeding"
+spec:
+  podSelector:
+    matchLabels:
+      component: "kube-apiserver"
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+# NOTE: a problem here is that the kube-apiserver pod is running in the root
+# namespace and thus have two addresses — external and internal. Only the
+# internal address is assigned to pod, but the service resolves to the external
+# address (as defined by the default value of the --endpoint-reconciler-type
+# argument to apiserver). So we can't specify the api server pod here :(
+#
+# The solution would be to remove the need to connect to the api server. To fix
+# this the wireguard controller should be patched to poll LKE clusters instead,
+# thus removing the wireguard-node controller.
+#
+# Another solution is to find why and how to patch apiserver so that kubernetes
+# service resolves to internal IPs.
+#
+#   - podSelector:
+#       matchLabels:
+#         component: "kube-apiserver"
+#     namespaceSelector:
+#       matchLabels:
+#         name: "kube-system"
+    ports:
+    - protocol: TCP
+      port: 6443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-to-dns
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    lke.linode.com/caplke-version: "bleeding"
+spec:
+  podSelector:
+    matchLabels:
+      component: "kube-apiserver"
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          k8s-app: "kube-dns"
+      namespaceSelector:
+        matchLabels:
+          name: "kube-system"
+    ports:
+    - protocol: UDP
+      port: 53
