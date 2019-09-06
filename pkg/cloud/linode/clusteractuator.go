@@ -114,7 +114,7 @@ func getVersion(cluster *clusterv1.Cluster) (ClusterVersion, error) {
 	s := cluster.ObjectMeta.Annotations[clusterVersionAnnotation]
 
 	// cluster reconciliation code will set version to v1.x.y-00z
-	if len(s) == 0 || s[0] != 'v' {
+	if len(s) == 0 || (s[0] != 'v' && s != BleedingEdge) {
 		return ClusterVersion{}, fmt.Errorf("bad %s annotation: '%s'", clusterVersionAnnotation, s)
 	}
 
