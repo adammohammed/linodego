@@ -67,7 +67,7 @@ run: fmt
 # Run in Linux container against the configured Kubernetes cluster in the file at $KUBECONFIG
 # Do not push and run this image from Kubernetes by image name, it will run out of threads while compiling :-)
 .PHONY: run-docker
-run-docker: fmt
+run-docker: build
 	@mkdir -p ${ROOT_DIR}/run
 	docker build -t "cluster-api-provider-lke:devel-run" -f Dockerfile.devel .
 	echo "Running the controller.. ctrl-c to stop, ctrl-z to detach (then use docker ps, docker attach, docker kill)"
