@@ -140,7 +140,7 @@ func getLinodeAPIClient(client client.Client, clusterNamespace string) (*linodeg
 
 func (lc *LinodeClient) setKubeletVersion(machine *clusterv1.Machine, cluster *clusterv1.Cluster) *apierrors.MachineError {
 	if version, err := getVersion(cluster); err != nil {
-		return apierrors.InvalidMachineConfiguration("cluster doesn't have a proper version")
+		return apierrors.InvalidMachineConfiguration("cluster doesn't have a proper version: %v", err)
 	} else {
 		machine.Spec.Versions.Kubelet = version.K8S()[1:] // strip the leading 'v' character
 	}

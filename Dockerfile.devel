@@ -1,31 +1,16 @@
-# Build the manager binary
-FROM golang:1.11.5 as builder
-
-# Copy in the go src
-WORKDIR /go/src/bits.linode.com/LinodeAPI/cluster-api-provider-lke
-COPY ./go.mod  .
-COPY ./go.sum  .
-COPY cmd/    cmd/
-COPY pkg/    pkg/
-COPY vendor/ vendor/
-
-RUN GO111MODULE=off CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o /tmp/manager bits.linode.com/LinodeAPI/cluster-api-provider-lke/cmd/manager
-
 FROM alpine:edge
-
 WORKDIR /root/
-
 COPY charts/ charts/
 COPY cacert.pem /
-
+COPY ./run/manager .
 RUN \
-        echo http://dl-cdn.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories && \
-        apk update && \
-        apk upgrade && \
-        apk add bash iproute2 openresolv procps curl wireguard-tools && \
-        curl -sSL https://dl.k8s.io/release/v1.13.8/bin/linux/amd64/kubeadm > /usr/bin/kubeadm-v1.13.8 && chmod a+rx /usr/bin/kubeadm-v1.13.8 && \
-        curl -sSL https://dl.k8s.io/release/v1.14.5/bin/linux/amd64/kubeadm > /usr/bin/kubeadm-v1.14.5 && chmod a+rx /usr/bin/kubeadm-v1.14.5 && \
-        curl -sSL https://dl.k8s.io/release/v1.14.5/bin/linux/amd64/kubeadm > /usr/bin/kubeadm && chmod a+rx /usr/bin/kubeadm
+    echo http://dl-cdn.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories && \
+    apk update && \
+    apk upgrade && \
+    apk add bash iproute2 openresolv procps curl wireguard-tools && \
+    curl -sSL https://dl.k8s.io/release/v1.13.8/bin/linux/amd64/kubeadm > /usr/bin/kubeadm-v1.13.8 && chmod a+rx /usr/bin/kubeadm-v1.13.8 && \
+    curl -sSL https://dl.k8s.io/release/v1.14.5/bin/linux/amd64/kubeadm > /usr/bin/kubeadm-v1.14.5 && chmod a+rx /usr/bin/kubeadm-v1.14.5 && \
+    curl -sSL https://dl.k8s.io/release/v1.14.5/bin/linux/amd64/kubeadm > /usr/bin/kubeadm && chmod a+rx /usr/bin/kubeadm
 
-COPY --from=builder /tmp/manager .
+COPY ./run/manager .
 ENTRYPOINT ["./manager"]
