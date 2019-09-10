@@ -33,6 +33,6 @@ func init() {
 		if err != nil {
 			return err
 		}
-		return machine.AddWithActuator(m, actuator, concurrentReconciles)
+		return machine.AddWithActuator(m, actuator)
 	})
 }
