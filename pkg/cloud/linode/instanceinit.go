@@ -290,9 +290,11 @@ kubeadm init --config /etc/kubernetes/kubeadm_config.yaml
 
 mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 
+ANNOTATION_PFX=lke.linode.com
+
 # Annotate node.
 for tries in $(seq 1 60); do
-	kubectl --kubeconfig /etc/kubernetes/kubelet.conf annotate --overwrite node ${HOSTNAME} machine=${MACHINE} && break
+	kubectl --kubeconfig /etc/kubernetes/kubelet.conf annotate --overwrite node ${HOSTNAME} $ANNOTATION_PFX/machine=${MACHINE} && break
 	sleep 1
 done 
 
@@ -388,9 +390,11 @@ echo "KUBELET_EXTRA_ARGS=--cloud-provider=external" > /etc/default/kubelet
 
 kubeadm join --token "${TOKEN}" "${ENDPOINT}" --ignore-preflight-errors=all --discovery-token-unsafe-skip-ca-verification
 
+ANNOTATION_PFX=lke.linode.com
+
 # Annotate node.
 for tries in $(seq 1 60); do
-	kubectl --kubeconfig /etc/kubernetes/kubelet.conf annotate --overwrite node ${HOSTNAME} machine=${MACHINE} && break
+	kubectl --kubeconfig /etc/kubernetes/kubelet.conf annotate --overwrite node ${HOSTNAME} $ANNOTATION_PFX/machine=${MACHINE} && break
 	sleep 1
 done 
 
@@ -422,9 +426,8 @@ systemctl enable wg-quick@wg0
 wg show
 
 # trying to do it for several times, but not so many, as we already sucesfully connected to the server
-PFX=lke.linode.com
 for tries in $(seq 1 10); do
-	kubectl --kubeconfig /etc/kubernetes/kubelet.conf annotate --overwrite node $HOSTNAME $PFX/wgpub="${PUBLICKEY}" $PFX/wgip="172.31.$N.1" &&
+	kubectl --kubeconfig /etc/kubernetes/kubelet.conf annotate --overwrite node $HOSTNAME $ANNOTATION_PFX/wgpub="${PUBLICKEY}" $ANNOTATION_PFX/wgip="172.31.$N.1" &&
 		break ||
 		echo "Failed to annotate node, atempt #$tries"
 	sleep 1

@@ -32,7 +32,7 @@ import (
 // For now, it is stored in the matching CRD under an annotation. This is similar to
 // the spec and status concept where the machine CRD is the instance spec and the annotation is the instance status.
 
-const InstanceStatusAnnotationKey = "instance-status"
+const InstanceStatusAnnotationKey = "lke.linode.com/instance-status"
 
 type instanceStatus *clusterv1.Machine
 
