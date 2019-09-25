@@ -16,6 +16,9 @@ pipeline {
         IMG = "${IMAGE_NAME}:${BUILD_IMAGE_TAG}"
         // IMG is used in the Makefile to determine the name of the source copy image to build
         SRC_IMG = "${BUILD_IMAGE_TAG}-source"
+        // Allow for 5 minutes per attempt to start the control plane - useful when Jenkins is busy
+        // (this yields up to ~25 minutes before kubebuilder will fail)
+        KUBEBUILDER_CONTROLPLANE_START_TIMEOUT = "5m"
     }
 
     options {
